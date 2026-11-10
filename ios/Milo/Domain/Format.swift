@@ -106,6 +106,11 @@ nonisolated enum Format {
         return date.formatted(.dateTime.day().month(.abbreviated).year())
     }
 
+    /// "Tuesday 10 November".
+    static func longDay(_ date: Date) -> String {
+        "\(date.formatted(.dateTime.weekday(.wide))) \(date.formatted(.dateTime.day())) \(date.formatted(.dateTime.month(.wide)))"
+    }
+
     static func shortDay(_ date: Date) -> String {
         date.formatted(.dateTime.day().month(.abbreviated))
     }

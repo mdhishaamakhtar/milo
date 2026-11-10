@@ -33,22 +33,29 @@ enum Radius {
     static let well: CGFloat = 13
 }
 
-// Sofia Sans at calm sizes, scaling with Dynamic Type. Numbers use tabular figures.
+// Sofia Sans at calm sizes (the canvas's type scale), scaling with Dynamic Type.
 extension Font {
     static func sofia(_ size: CGFloat, _ weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
         .custom("Sofia Sans", size: size, relativeTo: style).weight(weight)
     }
 
-    static let largeTitleMilo = sofia(34, .bold, relativeTo: .largeTitle)
-    static let titleMilo = sofia(22, .bold, relativeTo: .title2)
-    static let headlineMilo = sofia(19, .semibold, relativeTo: .headline)
-    static let bodyMilo = sofia(17, .regular, relativeTo: .body)
-    static let bodyStrong = sofia(17, .semibold, relativeTo: .body)
-    static let calloutMilo = sofia(15, .regular, relativeTo: .callout)
-    static let calloutStrong = sofia(15, .semibold, relativeTo: .callout)
-    static let footMilo = sofia(13, .regular, relativeTo: .footnote)
-    static let footStrong = sofia(13, .semibold, relativeTo: .footnote)
-    static let captionMilo = sofia(12, .medium, relativeTo: .caption)
+    /// Screen titles: "Today", "Progress".
+    static let large = sofia(34, .bold, relativeTo: .largeTitle)
+    /// Pushed screen titles: "Legs", "Chest Press".
+    static let title = sofia(26, .bold, relativeTo: .title)
+    /// Section headers: "Templates", "Recent".
+    static let h2 = sofia(20, .bold, relativeTo: .title3)
+    /// Card and row titles.
+    static let h3 = sofia(17, .semibold, relativeTo: .headline)
+    static let body16 = sofia(16, .regular, relativeTo: .body)
+    static let bodyStrong = sofia(16, .semibold, relativeTo: .body)
+    /// Secondary lines.
+    static let sub = sofia(14.5, .regular, relativeTo: .subheadline)
+    /// Small labels.
+    static let cap = sofia(12.5, .semibold, relativeTo: .caption)
+    static let button = sofia(17, .bold, relativeTo: .headline)
+    static let buttonSmall = sofia(15, .bold, relativeTo: .subheadline)
+    static let link = sofia(15.5, .semibold, relativeTo: .subheadline)
 }
 
 extension View {
@@ -71,9 +78,9 @@ struct PrimaryButtonStyle: ButtonStyle {
     var compact = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.bodyStrong)
+            .font(compact ? .buttonSmall : .button)
             .foregroundStyle(Color.bg)
-            .frame(maxWidth: .infinity, minHeight: compact ? 44 : 52)
+            .frame(maxWidth: .infinity, minHeight: compact ? 46 : 54)
             .background(Color.tx.opacity(configuration.isPressed ? 0.85 : 1), in: .capsule)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.snappy(duration: 0.18), value: configuration.isPressed)
@@ -85,10 +92,10 @@ struct SecondaryButtonStyle: ButtonStyle {
     var compact = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(compact ? .calloutStrong : .bodyStrong)
+            .font(compact ? .sofia(14, .semibold) : .button)
             .foregroundStyle(Color.tx)
-            .padding(.horizontal, compact ? 14 : 18)
-            .frame(minHeight: compact ? 36 : 52)
+            .padding(.horizontal, compact ? 13 : 18)
+            .frame(minHeight: compact ? 34 : 54)
             .background(Color.s2.opacity(configuration.isPressed ? 0.7 : 1), in: .capsule)
             .overlay(Capsule().strokeBorder(Color.line))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
@@ -118,11 +125,13 @@ struct SectionHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.headlineMilo)
+            Text(title).font(.h2)
             Spacer()
-            trailing.font(.calloutStrong).tint(.or)
+            trailing.font(.link).foregroundStyle(Color.or).tint(.or)
         }
         .padding(.horizontal, 4)
+        .padding(.top, 30)
+        .padding(.bottom, 12)
     }
 }
 
@@ -133,11 +142,11 @@ struct Badge: View {
 
     var body: some View {
         Text(text)
-            .font(.captionMilo)
+            .font(.sofia(12, .bold))
             .foregroundStyle(color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(color.opacity(0.14), in: .rect(cornerRadius: 6))
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(color.opacity(0.14), in: .rect(cornerRadius: 7))
     }
 }
 
@@ -147,14 +156,15 @@ struct BarMLogo: View {
     var color: Color = .or
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: size * 0.09) {
-            ForEach([0.62, 0.42, 0.74, 1.0], id: \.self) { h in
-                RoundedRectangle(cornerRadius: size * 0.05)
+        // The canvas mark: bars of 26, 14, 20 and 36 in a 48-unit box.
+        HStack(alignment: .bottom, spacing: size * 3 / 48) {
+            ForEach(Array([26.0, 14, 20, 36].enumerated()), id: \.offset) { _, h in
+                RoundedRectangle(cornerRadius: size * 2.5 / 48)
                     .fill(color)
-                    .frame(width: size * 0.16, height: size * h)
+                    .frame(width: size * 7.5 / 48, height: size * h / 48)
             }
         }
-        .frame(width: size, height: size, alignment: .bottom)
+        .frame(width: size, height: size * 36 / 48, alignment: .bottom)
         .accessibilityHidden(true)
     }
 }
@@ -167,8 +177,8 @@ struct AvatarButton: View {
     var body: some View {
         Button(action: action) {
             Text(initial)
-                .font(.calloutStrong)
-                .frame(width: 40, height: 40)
+                .font(.sofia(16, .bold))
+                .frame(width: 44, height: 44)
                 .background(Color.s2, in: .circle)
                 .overlay(Circle().strokeBorder(Color.line2))
         }
@@ -210,9 +220,9 @@ struct UnitSwitch: View {
                     unit = u
                 } label: {
                     Text(u.rawValue)
-                        .font(.footStrong)
-                        .foregroundStyle(unit == u ? Color.bg : Color.tx2)
-                        .frame(width: 36, height: 26)
+                        .font(.sofia(12.5, .bold))
+                        .foregroundStyle(unit == u ? Color.bg : Color.tx3)
+                        .frame(width: 34, height: 22)
                         .background(unit == u ? Color.tx : Color.clear, in: .capsule)
                 }
                 .buttonStyle(.plain)
@@ -220,9 +230,9 @@ struct UnitSwitch: View {
                 .accessibilityAddTraits(unit == u ? .isSelected : [])
             }
         }
-        .padding(3)
+        .padding(2)
         .background(Color.well, in: .capsule)
-        .overlay(Capsule().strokeBorder(Color.line))
+        .overlay(Capsule().strokeBorder(Color.line2))
         .animation(.snappy(duration: 0.18), value: unit)
         .sensoryFeedback(.selection, trigger: unit)
     }

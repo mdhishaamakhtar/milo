@@ -1,0 +1,270 @@
+import SwiftUI
+
+/// The running workout, full screen. The chevron tucks it away; Today shows it live.
+struct WorkoutView: View {
+    @Environment(AppModel.self) private var app
+    @State private var model: WorkoutModel?
+    @State private var milo: MiloSession?
+
+    var body: some View {
+        Group {
+            if let model, let milo {
+                WorkoutScreen(milo: milo).environment(model)
+            } else {
+                Color.bg.ignoresSafeArea()
+            }
+        }
+        .onAppear {
+            guard model == nil else { return }
+            let m = WorkoutModel(app: app)
+            m.watch()
+            model = m
+            milo = MiloSession(app: app)
+        }
+    }
+}
+
+private struct WorkoutScreen: View {
+    @Environment(AppModel.self) private var app
+    @Environment(WorkoutModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let milo: MiloSession
+    @State private var talking = false
+    @State private var finishing = false
+    @FocusState private var fieldFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            // One stable container: an inset on a ScrollView belongs to that scroll view, and
+            // switching content would rebuild the add field and drop its focus.
+            ZStack { content }
+                .safeAreaInset(edge: .bottom) { bottom }
+                .miloScreen()
+                .toolbar { toolbar }
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(isPresented: $finishing) { FinishView() }
+        }
+        .onChange(of: model.detail.value == nil) { _, gone in if gone { dismiss() } }
+        .onAppear {
+            if let w = model.detail.value?.workout {
+                app.miloContext = MiloContext(screen: "workout", prompt: "Next exercise, or tell Milo", workoutID: w.id)
+            }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if talking {
+            Conversation(session: milo, onAdded: added)
+        } else if !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
+            ScrollView { MatchList(ask: ask).padding(.horizontal, 16).padding(.top, 8) }
+                .scrollDismissesKeyboard(.interactively)
+        } else if model.entries.isEmpty {
+            EmptyStart(ask: ask)
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if !model.finished.isEmpty { FinishedCard(entries: model.finished) }
+                        if let current = model.current {
+                            ExerciseCard(entry: current).id(current.id)
+                        }
+                        if !model.upNext.isEmpty { UpNext(entries: model.upNext) }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: model.current?.id) { _, id in withAnimation { proxy.scrollTo(id, anchor: .top) } }
+            }
+        }
+    }
+
+    @ViewBuilder private var bottom: some View {
+        if model.editing != nil {
+            NumberPad().transition(.move(edge: .bottom))
+        } else {
+            VStack(spacing: 8) {
+                if let end = model.restEndsAt, !talking { RestBar(endsAt: end) }
+                AddField(
+                    placeholder: talking ? "Correct it, e.g. \"it was a cable\"" : model.entries.isEmpty ? "Exercise name, or describe it" : "Next exercise, or tell Milo",
+                    focused: $fieldFocused,
+                    ask: ask)
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 6)
+        }
+    }
+
+    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            if talking {
+                Button { withAnimation(.snappy) { talking = false } } label: { Image(systemName: "chevron.left").foregroundStyle(Color.tx) }
+                    .accessibilityLabel("Back to the exercises")
+            } else {
+                Button { dismiss() } label: { Image(systemName: "chevron.down").foregroundStyle(Color.tx) }
+                    .accessibilityLabel("Minimise workout")
+            }
+        }
+        ToolbarItem(placement: .principal) {
+            if let w = model.detail.value?.workout {
+                VStack(spacing: 1) {
+                    Text(w.name).font(.sofia(16.5, .semibold)).lineLimit(1)
+                    HStack(spacing: 5) {
+                        Circle().fill(Color.or).frame(width: 6, height: 6)
+                        Text(timerInterval: w.startedAt...Date.distantFuture, countsDown: false)
+                            .font(.sofia(14, .medium)).monospacedDigit().foregroundStyle(Color.tx2)
+                    }
+                }
+            }
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button("Finish") { model.closePad(); finishing = true }
+                .font(.sofia(16, .bold))
+                .tint(Color.tx)
+                .disabled(model.detail.value?.doneSetCount == 0)
+        }
+    }
+
+    private func ask(_ text: String) {
+        fieldFocused = false
+        withAnimation(.snappy) { talking = true }
+        let context = MiloContext(screen: "workout", prompt: "", workoutID: model.detail.value?.workout.id)
+        Task { await milo.send(text, context: context) }
+    }
+
+    /// A new exercise from Milo went into the workout: show it open.
+    private func added() {
+        withAnimation(.snappy) { talking = false }
+        if let id = milo.addedWorkoutExercise { model.openID = id }
+    }
+}
+
+/// A blank workout: what usually comes first, a template, or a pasted plan.
+private struct EmptyStart: View {
+    @Environment(AppModel.self) private var app
+    @Environment(WorkoutModel.self) private var model
+    @State private var firsts = Live<[ExerciseMatch]>([])
+    @State private var templates = Live<[TemplateSummary]>([])
+    let ask: (String) -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("What's first?").font(.sofia(30, .bold)).tracking(-0.4)
+                Text("Type the exercise the way your trainer says it. If it isn't in your list, Milo works out what it is.")
+                    .font(.sofia(15.5, .regular)).foregroundStyle(Color.tx2).padding(.top, 8)
+                if !firsts.value.isEmpty {
+                    Text("You usually start with").font(.h3).padding(.top, 26).padding(.bottom, 12)
+                    VStack(spacing: 0) {
+                        ForEach(Array(firsts.value.enumerated()), id: \.element.id) { i, m in
+                            if i > 0 { Divider().overlay(Color.line).padding(.leading, 16) }
+                            Button { model.add(m.exercise) } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(m.exercise.name).font(.sofia(16, .semibold))
+                                        if let d = m.lastDate {
+                                            Text("Last \(Format.shortDay(d))" + (m.lastText.map { ", \($0)" } ?? "")).font(.sofia(14, .regular)).foregroundStyle(Color.tx2)
+                                        }
+                                    }
+                                    Spacer()
+                                    Image(systemName: "plus").font(.system(size: 15, weight: .semibold))
+                                        .frame(width: 34, height: 34).background(Color.s2, in: .circle)
+                                }
+                                .padding(.horizontal, 16).frame(minHeight: 58).contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .background(Color.s1, in: .rect(cornerRadius: Radius.card))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
+                }
+                HStack(spacing: 8) {
+                    if !templates.value.isEmpty {
+                        Menu {
+                            ForEach(templates.value) { t in
+                                Button(t.template.name) { useTemplate(t.template) }
+                            }
+                        } label: { Label("Use a template", systemImage: "line.3.horizontal") }
+                    }
+                    Button { if let plan = UIPasteboard.general.string, !plan.isEmpty { ask("Here's today's plan; set up the exercises:\n" + plan) } } label: {
+                        Label("Paste a plan", systemImage: "doc")
+                    }
+                }
+                .buttonStyle(.chip)
+                .labelStyle(ChipLabelStyle())
+                .padding(.top, 14)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+        }
+        .onAppear {
+            let db = app.db
+            firsts.watch(db) { try db.usualFirsts($0) }
+            templates.watch(db) { try db.templates($0) }
+        }
+    }
+
+    private func useTemplate(_ t: Template) {
+        guard let w = model.detail.value?.workout else { return }
+        for item in t.items { _ = try? app.db.addExercise(item.exerciseId, to: w.id, groupLabel: item.groupLabel) }
+        var renamed = w
+        renamed.name = t.name
+        renamed.templateId = t.id
+        try? app.db.save(renamed)
+        app.edited()
+    }
+}
+
+/// Exercises already done, one line each.
+private struct FinishedCard: View {
+    @Environment(WorkoutModel.self) private var model
+    let entries: [ExerciseEntry]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(entries.enumerated()), id: \.element.id) { i, e in
+                if i > 0 { Divider().overlay(Color.line).padding(.leading, 52) }
+                Button { withAnimation(.snappy) { model.openID = e.id } } label: {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle().fill(Color.or.opacity(0.16))
+                            Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.or)
+                        }
+                        .frame(width: 24, height: 24)
+                        Text(e.exercise.name).font(.sofia(16, .semibold)).lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(Format.summary(e)).font(.sofia(14.5, .regular)).foregroundStyle(Color.tx2).lineLimit(1)
+                    }
+                    .padding(.horizontal, 16).frame(minHeight: 54).contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(Color.s1, in: .rect(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
+    }
+}
+
+/// What's left, as a plain list.
+private struct UpNext: View {
+    @Environment(WorkoutModel.self) private var model
+    let entries: [ExerciseEntry]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Up next").font(.cap).foregroundStyle(Color.tx3).padding(.horizontal, 4).padding(.top, 8)
+            ForEach(entries) { e in
+                Button { withAnimation(.snappy) { model.openID = e.id } } label: {
+                    HStack {
+                        Text(e.exercise.name).font(.sofia(16, .medium))
+                        Spacer()
+                        Text("\(e.sets.count) \(e.sets.count == 1 ? "set" : "sets")").font(.sofia(14, .regular)).foregroundStyle(Color.tx3)
+                    }
+                    .padding(.horizontal, 4).frame(minHeight: 44).contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
