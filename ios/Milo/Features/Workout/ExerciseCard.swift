@@ -44,7 +44,7 @@ struct ExerciseCard: View {
 
             HStack(spacing: 8) {
                 Button { model.addSet(to: entry) } label: { Label("Set", systemImage: "plus") }
-                Button { noting.toggle(); note = entry.we.notes } label: { Label("Note", systemImage: "line.3.horizontal") }
+                Button { withAnimation(.settle) { noting.toggle() }; note = entry.we.notes } label: { Label("Note", systemImage: "line.3.horizontal") }
                 if !model.isPast {
                     Menu {
                         ForEach([30, 45, 60, 90, 120, 150, 180], id: \.self) { s in
@@ -118,8 +118,10 @@ struct ExerciseCard: View {
                 row(i, set, mark: marks[i])
                     .swipeToDelete("Delete set") { model.delete(set) }
                     .contextMenu { setMenu(set) }
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             }
         }
+        .animation(.settle, value: entry.sets.map(\.id))
     }
 
     /// What kind of set it is, and delete. On the set number and on a long press.
@@ -184,6 +186,8 @@ struct ExerciseCard: View {
                     Text(shown.isEmpty ? "–" : shown)
                         .font(.sofia(18.5, .bold))
                         .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .animation(.quick, value: shown)
                 }
                 if editing {
                     RoundedRectangle(cornerRadius: 1).fill(Color.or).frame(width: 2, height: 22)
@@ -197,6 +201,7 @@ struct ExerciseCard: View {
             .background(state.fill, in: .rect(cornerRadius: Radius.well))
             .overlay(RoundedRectangle(cornerRadius: Radius.well).strokeBorder(state.stroke, lineWidth: editing ? 1.5 : 1))
             .shadow(color: editing ? Color.or.opacity(0.25) : .clear, radius: 6)
+            .animation(.quick, value: state)
         }
         .buttonStyle(.plain)
     }
@@ -206,6 +211,7 @@ struct ExerciseCard: View {
             if set.done {
                 Circle().fill(Color.or)
                 Image(systemName: "checkmark").font(.system(size: 14, weight: .bold)).foregroundStyle(Color(hex: 0x1A0E04))
+                    .transition(.scale(scale: 0.4).combined(with: .opacity))
             } else if set.id == currentSetID {
                 Circle().strokeBorder(Color.tx2, lineWidth: 1.5)
                 Image(systemName: "checkmark").font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.tx2)
@@ -214,7 +220,7 @@ struct ExerciseCard: View {
             }
         }
         .frame(width: 32, height: 32)
-        .animation(.snappy(duration: 0.2), value: set.done)
+        .animation(.bouncy(duration: 0.3, extraBounce: 0.1), value: set.done)
         .sensoryFeedback(.success, trigger: set.done) { _, now in now }
     }
 }

@@ -33,6 +33,10 @@
 	<string>Milo reads your body weight, height, date of birth and sex to estimate calories and to count bodyweight and assisted sets honestly.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Milo saves your finished workouts and the active energy they burned to Apple Health.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Milo listens when you tap the microphone, so you can say what you did instead of typing it.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Milo turns what you say into text for your message.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>SofiaSans.ttf</string>

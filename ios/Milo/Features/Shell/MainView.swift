@@ -4,6 +4,7 @@ import SwiftUI
 struct MainView: View {
     @Environment(AppModel.self) private var app
     @State private var tab = TabID.today
+    @Namespace private var workoutSpace
 
     enum TabID { case today, history, progress }
 
@@ -24,7 +25,11 @@ struct MainView: View {
             AskMiloBar(prompt: app.miloContext.prompt) { app.showingMilo = true }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-        .fullScreenCover(isPresented: $app.showingWorkout) { WorkoutView() }
+        .environment(\.workoutSpace, workoutSpace)
+        // The workout grows out of its card on Today and tucks back into it.
+        .fullScreenCover(isPresented: $app.showingWorkout) {
+            WorkoutView().navigationTransition(.zoom(sourceID: WorkoutSource.id, in: workoutSpace))
+        }
         .sheet(isPresented: $app.showingMilo, onDismiss: app.miloClosed) { MiloView() }
         .sheet(isPresented: $app.showingProfile) { ProfileView() }
     }
@@ -56,6 +61,32 @@ struct AskMiloBar: View {
         .buttonStyle(.plain)
         .accessibilityLabel(prompt)
         .accessibilityHint("Opens Milo")
+    }
+}
+
+/// The card on Today that the workout screen opens out of.
+enum WorkoutSource {
+    static let id = "workout"
+}
+
+extension EnvironmentValues {
+    @Entry var workoutSpace: Namespace.ID?
+}
+
+extension View {
+    /// Marks the view the workout screen zooms out of and back into.
+    func workoutSource() -> some View { modifier(WorkoutSourceModifier()) }
+}
+
+private struct WorkoutSourceModifier: ViewModifier {
+    @Environment(\.workoutSpace) private var space
+
+    func body(content: Content) -> some View {
+        if let space {
+            content.matchedTransitionSource(id: WorkoutSource.id, in: space) { $0.clipShape(.rect(cornerRadius: Radius.card)) }
+        } else {
+            content
+        }
     }
 }
 

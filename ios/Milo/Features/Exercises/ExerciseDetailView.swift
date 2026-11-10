@@ -9,6 +9,8 @@ struct ExerciseDetailView: View {
     let exerciseID: UUID
     @State private var data = Live<ExerciseProgress?>(nil)
     @State private var metric = Metric.top
+    /// Where a finger is on the chart; the nearest session is read out.
+    @State private var scrubbing: Date?
     @State private var editing = false
     @State private var deleting = false
 
@@ -113,14 +115,19 @@ struct ExerciseDetailView: View {
     private func chartCard(_ p: ExerciseProgress, loaded: Bool) -> some View {
         let pts = points(p, loaded: loaded)
         let best = pts.max { $0.value < $1.value }
+        let scrubbed = scrubbing.flatMap { at in pts.min { abs($0.date.timeIntervalSince(at)) < abs($1.date.timeIntervalSince(at)) } }
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(caption(p, loaded: loaded)).font(.cap).foregroundStyle(Color.tx3)
-                    if let best { headline(best, p, loaded: loaded) }
+                    if let shown = scrubbed ?? best {
+                        headline(shown, p, loaded: loaded).contentTransition(.numericText()).animation(.quick, value: shown.id)
+                    }
                 }
                 Spacer()
-                if let best, pts.count > 1 {
+                if let scrubbed {
+                    Badge(text: Format.shortDay(scrubbed.date), color: .tx2)
+                } else if let best, pts.count > 1 {
                     Badge(text: "↑ Best, \(Format.shortDay(best.date))", color: .bl)
                 }
             }
@@ -134,12 +141,19 @@ struct ExerciseDetailView: View {
                             .foregroundStyle(Color.or)
                             .symbolSize(22)
                     }
-                    if let last = pts.last {
-                        PointMark(x: .value("Day", last.date), y: .value("Value", last.value))
+                    if let marked = scrubbed ?? pts.last {
+                        PointMark(x: .value("Day", marked.date), y: .value("Value", marked.value))
                             .foregroundStyle(Color.or.opacity(0.3))
                             .symbolSize(160)
                     }
+                    if let scrubbed {
+                        RuleMark(x: .value("Day", scrubbed.date))
+                            .foregroundStyle(Color.line2)
+                            .lineStyle(StrokeStyle(lineWidth: 1))
+                    }
                 }
+                .chartXSelection(value: $scrubbing)
+                .sensoryFeedback(.selection, trigger: scrubbed?.id)
                 .chartYScale(domain: .automatic(includesZero: false))
                 .chartYAxis {
                     AxisMarks(values: .automatic(desiredCount: 3)) { _ in AxisGridLine().foregroundStyle(Color.line) }
@@ -262,7 +276,7 @@ struct ExerciseDetailView: View {
                     .frame(minHeight: 64)
                     .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
             }
         }
         .background(Color.s1, in: .rect(cornerRadius: Radius.card))
@@ -326,14 +340,14 @@ private struct MetricPicker: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(ExerciseDetailView.Metric.allCases, id: \.self) { m in
-                Button { withAnimation(.snappy(duration: 0.2)) { metric = m } } label: {
+                Button { withAnimation(.quick) { metric = m } } label: {
                     Text(m.rawValue)
                         .font(.sofia(14.5, .semibold))
                         .foregroundStyle(metric == m ? Color.tx : Color.tx2)
                         .frame(maxWidth: .infinity, minHeight: 34)
                         .background(metric == m ? Color.s3 : Color.clear, in: .rect(cornerRadius: 10))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 .accessibilityAddTraits(metric == m ? .isSelected : [])
             }
         }

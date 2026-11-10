@@ -3,29 +3,28 @@ import MiloAPI
 import SwiftProtobuf
 import SwiftUI
 
-/// Milo, opened from the Ask bar on any screen.
+/// Milo, opened from the Ask bar on any screen. The conversation stays as it was
+/// when the sheet is reopened; earlier ones are under Chats.
 struct MiloView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @State private var session: MiloSession?
     @State private var text = ""
     @State private var chip: String?
     @State private var path = NavigationPath()
     @State private var editingTemplate: Template?
     @FocusState private var focused: Bool
 
+    private var session: MiloSession { app.milo }
 
     var body: some View {
         NavigationStack(path: $path) {
             Group {
-                if let session, !session.isEmpty {
+                if session.isEmpty {
+                    MiloHome { suggestion in Task { await send(suggestion) } }
+                } else {
                     Conversation(session: session, openRunning: { dismiss() }, openWorkout: { path.append(WorkoutRoute(id: $0)) },
                                  openExercise: { path.append(ExerciseRoute(id: $0)) },
                                  editTemplate: { id in editingTemplate = try? app.db.writer.read { try Template.fetchOne($0, key: id) } })
-                } else {
-                    MiloHome { suggestion in Task { await send(suggestion) } } open: { id in
-                        Task { await session?.open(id) }
-                    }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -34,15 +33,16 @@ struct MiloView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "doc").font(.system(size: 12))
                             Text(chip).font(.sofia(13.5, .medium))
-                            Button { self.chip = nil } label: { Image(systemName: "xmark").font(.system(size: 11, weight: .bold)) }
+                            Button { withAnimation(.quick) { self.chip = nil } } label: { Image(systemName: "xmark").font(.system(size: 11, weight: .bold)) }
                                 .accessibilityLabel("Don't send this context")
                         }
                         .foregroundStyle(Color.tx2)
                         .padding(.horizontal, 12).frame(height: 32)
                         .background(Color.s1, in: .capsule)
                         .overlay(Capsule().strokeBorder(Color.line2))
+                        .transition(.opacity)
                     }
-                    Composer(text: $text, placeholder: session?.isEmpty == false ? "Message Milo" : "Message Milo", busy: session?.busy == true, focused: $focused) {
+                    Composer(text: $text, placeholder: "Message Milo", busy: session.busy, focused: $focused) {
                         let t = text
                         text = ""
                         Task { await send(t) }
@@ -57,20 +57,29 @@ struct MiloView: View {
                     Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.tx) }.accessibilityLabel("Close")
                 }
                 ToolbarItem(placement: .principal) {
-                    HStack(spacing: 7) { BarMLogo(size: 16); Text("Milo").font(.sofia(17, .bold)) }
+                    HStack(spacing: 7) { BarMLogo(size: 16, working: session.busy); Text("Milo").font(.sofia(17, .bold)) }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { session?.reset(); chip = app.miloContext.chip } label: { Image(systemName: "square.and.pencil").foregroundStyle(Color.tx) }
-                        .accessibilityLabel("New conversation")
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { path.append(ChatsRoute()) } label: { Image(systemName: "clock.arrow.circlepath").foregroundStyle(Color.tx) }
+                        .accessibilityLabel("Chats")
+                    Button { withAnimation(.settle) { session.reset() }; chip = app.miloContext.chip } label: { Image(systemName: "square.and.pencil").foregroundStyle(Color.tx) }
+                        .accessibilityLabel("New chat")
+                        .disabled(session.isEmpty)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .miloDestinations()
+            .navigationDestination(for: ChatsRoute.self) { _ in
+                ChatsView { id in
+                    path = NavigationPath()
+                    Task { await session.open(id) }
+                }
+            }
         }
         .presentationDragIndicator(.visible)
         .sheet(item: $editingTemplate) { TemplateEditor(template: $0) }
         .onAppear {
-            if session == nil { session = MiloSession(app: app) }
+            session.resetIfIdle()
             chip = app.miloContext.chip
         }
     }
@@ -78,7 +87,7 @@ struct MiloView: View {
     private func send(_ text: String) async {
         var context = app.miloContext
         if chip == nil { context = MiloContext(screen: context.screen, prompt: context.prompt) }
-        await session?.send(text, context: context)
+        await session.send(text, context: context)
     }
 }
 
@@ -97,21 +106,32 @@ struct Conversation: View {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     ForEach(Array(session.items.enumerated()), id: \.element.id) { i, item in
                         let startsReply = i == 0 || { if case .user = session.items[i - 1] { return true } else { return false } }()
-                        row(item, startsReply: startsReply).id(item.id)
+                        row(item, startsReply: startsReply).id(item.id).transition(.arrive)
                     }
-                    if session.busy, case .user = session.items.last {
-                        HStack(spacing: 7) { BarMLogo(size: 13); Text("Milo").font(.sofia(13, .semibold)) }
-                            .foregroundStyle(Color.tx2).padding(.horizontal, 4)
-                            .phaseAnimator([0.4, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.7) }
+                    if session.isWorking {
+                        // Milo is reading or deciding: its mark moves until the next thing arrives.
+                        HStack(spacing: 7) {
+                            BarMLogo(size: 13, working: true)
+                            if case .user = session.items.last { Text("Milo").font(.sofia(13, .semibold)).foregroundStyle(Color.tx2) }
+                        }
+                        .padding(.horizontal, 4)
+                        .frame(height: 20)
+                        .transition(.opacity)
+                        .accessibilityElement()
+                        .accessibilityLabel("Milo is working")
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, 16)
+                .animation(.settle, value: session.items.count)
+                .animation(.settle, value: session.isWorking)
             }
             .scrollDismissesKeyboard(.interactively)
             .defaultScrollAnchor(.bottom)
-            .onChange(of: session.items.count) { withAnimation { proxy.scrollTo(session.items.last?.id, anchor: .bottom) } }
+            // Stay at the bottom while a reply streams in and grows.
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
+            .onChange(of: session.items.count) { withAnimation(.settle) { proxy.scrollTo(session.items.last?.id, anchor: .bottom) } }
         }
     }
 
@@ -169,14 +189,15 @@ struct Composer: View {
                 .lineLimit(1...5)
                 .focused(focused)
                 .onSubmit { if !empty && !busy { send() } }
-            Image(systemName: "mic").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.tx2)
+            MicButton(text: $text)
             Button(action: send) {
                 Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold))
                     .foregroundStyle(empty || busy ? Color.tx3 : Color.bg)
                     .frame(width: 38, height: 38)
                     .background(empty || busy ? Color.s3 : Color.tx, in: .circle)
+                    .animation(.quick, value: empty || busy)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.row)
             .disabled(empty || busy)
             .accessibilityLabel("Send")
         }
@@ -185,25 +206,23 @@ struct Composer: View {
     }
 }
 
-/// Milo before anything is said: what it can do, suggestions, earlier conversations.
+/// Milo before anything is said: what it can do, and a few things to try.
 private struct MiloHome: View {
-    @Environment(AppModel.self) private var app
-    @State private var earlier: [Milo_Conversation] = []
     let ask: (String) -> Void
-    let open: (String) -> Void
 
     private let suggestions: [(String, String)] = [
+        ("play", "Start my next workout"),
         ("calendar", "What did I do last week?"),
-        ("list.bullet", "Help me build a pull day template"),
         ("chart.line.uptrend.xyaxis", "Which lift has improved most?"),
+        ("list.bullet", "Help me build a pull day template"),
         ("square.and.pencil", "Log yesterday from my notes"),
     ]
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Ask, or tell me what to change.").font(.sofia(24, .bold)).tracking(-0.3)
-                Text("I can read everything you've logged and edit any of it. You see each change before it's saved, and you can undo it.")
+                Text("Ask, or tell me what to do.").font(.sofia(24, .bold)).tracking(-0.3)
+                Text("I can do anything in your log that you can: start and finish workouts, log and fix sets, build templates, answer questions. Anything I change, you can undo.")
                     .font(.sofia(15.5, .regular)).foregroundStyle(Color.tx2).padding(.top, 8)
                 VStack(spacing: 0) {
                     ForEach(Array(suggestions.enumerated()), id: \.offset) { i, s in
@@ -214,48 +233,20 @@ private struct MiloHome: View {
                                     .frame(width: 32, height: 32).background(Color.s2, in: .rect(cornerRadius: 10))
                                 Text(s.1).font(.sofia(16, .medium)).multilineTextAlignment(.leading)
                                 Spacer(minLength: 4)
-                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.tx3)
+                                Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.tx3)
                             }
                             .padding(.horizontal, 14).frame(minHeight: 56).contentShape(.rect)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                     }
                 }
                 .background(Color.s1, in: .rect(cornerRadius: Radius.card))
                 .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
                 .padding(.top, 20)
-
-                if !earlier.isEmpty {
-                    SectionHeader("Earlier")
-                    VStack(spacing: 0) {
-                        ForEach(Array(earlier.enumerated()), id: \.element.id) { i, c in
-                            if i > 0 { Divider().overlay(Color.line).padding(.leading, 14) }
-                            Button { open(c.id) } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(c.title).font(.sofia(16, .semibold)).lineLimit(1)
-                                        if !c.summary.isEmpty { Text(c.summary).font(.sofia(14, .regular)).foregroundStyle(Color.tx2).lineLimit(1) }
-                                    }
-                                    Spacer(minLength: 6)
-                                    Text(Format.shortDay(c.updatedAt.date)).font(.cap).foregroundStyle(Color.tx3)
-                                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.tx3)
-                                }
-                                .padding(.horizontal, 14).frame(minHeight: 58).contentShape(.rect)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .background(Color.s1, in: .rect(cornerRadius: Radius.card))
-                    .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
-                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
         }
-        .task {
-            var req = Milo_ListConversationsRequest()
-            req.limit = 10
-            earlier = (try? await app.api.milo.listConversations(request: req, headers: APIClient.headers(app.session.token)).value().conversations) ?? []
-        }
+        .scrollDismissesKeyboard(.interactively)
     }
 }

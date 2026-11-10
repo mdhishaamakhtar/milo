@@ -471,7 +471,7 @@ nonisolated extension AppDatabase {
         let start = detail.workout.startedAt
         var out: [UUID: ExerciseInsight] = [:]
         for e in detail.entries where e.exercise.measurement == .repsLoad {
-            func load(_ s: LoggedSet) -> Double? { s.done && (s.reps ?? 0) > 0 ? Maths.toKg(s.weight, s.unit) : nil }
+            func load(_ s: LoggedSet) -> Double? { s.isWorking && (s.reps ?? 0) > 0 ? Maths.toKg(s.weight, s.unit) : nil }
             var earlier: (kg: Double, date: Date, set: LoggedSet)?
             for past in try history(db, exerciseId: e.exercise.id) where past.workout.startedAt < start {
                 for s in past.sets {

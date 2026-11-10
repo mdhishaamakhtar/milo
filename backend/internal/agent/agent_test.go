@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect/v2"
 	"github.com/anthropics/anthropic-sdk-go/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
@@ -585,5 +586,47 @@ func TestOneTurnAddingSeveralExercises(t *testing.T) {
 	}
 	if len(setPositions) != 2 || setPositions[0] != 1 || setPositions[1] != 2 {
 		t.Fatalf("bench set positions = %v, want [1 2]", setPositions)
+	}
+}
+
+func TestConversationsAreSummarisedAndDeleted(t *testing.T) {
+	model := &fakeModel{}
+	env := testkit.NewAPI(t, config.Config{}, model)
+	alice, _ := env.SignUp(t, "alice")
+	bob, _ := env.SignUp(t, "bob")
+	workoutID := openWorkout(t, env, alice)
+	bench := builtin(t, env, "Bench Press (Barbell)")
+
+	model.then(say(t, "You haven't logged anything this week yet, so there is nothing to compare."))
+	ev := send(t, env, alice, "", "How has this week gone compared with the one before it, roughly speaking?", nil)
+	list, _ := env.Milo.ListConversations(alice, &milo.ListConversationsRequest{})
+	c := list.GetConversations()[0]
+	if c.GetTitle() != "How has this week gone compared with the one before it…" || c.GetSummary() != "You haven't logged anything this week yet, so there is nothing to compare." {
+		t.Fatalf("title %q, summary %q", c.GetTitle(), c.GetSummary())
+	}
+
+	// Once cards are applied, the summary says what was done, in order.
+	set := []map[string]any{{"reps": 5, "weight": "100"}}
+	model.then(use(t, "log_sets", map[string]any{"exercise_id": bench.String(), "sets": set}), use(t, "log_sets", map[string]any{"exercise_id": bench.String(), "sets": set}), say(t, "Logged."))
+	ev = send(t, env, alice, ev.done, "bench 100 for 5, twice", &milo.MiloContext{WorkoutId: workoutID.String()})
+	for _, card := range ev.cards {
+		if _, err := env.Milo.SetCardStatus(alice, &milo.SetCardStatusRequest{CardId: card.GetId(), Status: milo.CardStatus_CARD_STATUS_APPLIED}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, _ = env.Milo.ListConversations(alice, &milo.ListConversationsRequest{})
+	if got := list.GetConversations()[0].GetSummary(); got != "Logged 1 set · Logged 1 set" {
+		t.Fatalf("summary = %q", got)
+	}
+
+	// Only its owner can delete it, and then it is gone.
+	_, err := env.Milo.DeleteConversation(bob, &milo.DeleteConversationRequest{Id: ev.done})
+	testkit.WantCode(t, err, connect.CodeNotFound)
+	if _, err := env.Milo.DeleteConversation(alice, &milo.DeleteConversationRequest{Id: ev.done}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ = env.Milo.ListConversations(alice, &milo.ListConversationsRequest{})
+	if len(list.GetConversations()) != 0 {
+		t.Fatalf("%d conversations left after deleting the only one", len(list.GetConversations()))
 	}
 }

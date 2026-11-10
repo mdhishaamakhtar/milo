@@ -18,14 +18,13 @@ struct AddField: View {
                 .focused(focused)
                 .submitLabel(.send)
                 .onSubmit(send)
-            if model.query.trimmingCharacters(in: .whitespaces).isEmpty {
-                Image(systemName: "mic").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.tx2).frame(width: 38, height: 38)
-            } else {
+            MicButton(text: $model.query)
+            if !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
                 Button(action: send) {
                     Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(Color.bg)
                         .frame(width: 38, height: 38).background(Color.tx, in: .circle)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 .accessibilityLabel("Send to Milo")
             }
         }
@@ -33,6 +32,7 @@ struct AddField: View {
         .padding(.trailing, 7)
         .padding(.vertical, 7)
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 26))
+        .animation(.quick, value: model.query.isEmpty)
     }
 
     private func send() {
@@ -70,7 +70,7 @@ struct MatchList: View {
                             }
                             .padding(.horizontal, 16).frame(minHeight: 58).contentShape(.rect)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                     }
                 }
                 .background(Color.s1, in: .rect(cornerRadius: Radius.card))
@@ -89,7 +89,7 @@ struct MatchList: View {
                 .background(Color.s1, in: .rect(cornerRadius: 20))
                 .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.line))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.row)
         }
         .onChange(of: model.query, initial: true) { _, text in
             let db = app.db

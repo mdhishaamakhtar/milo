@@ -11,7 +11,7 @@ struct WorkoutList: View {
             ForEach(Array(workouts.enumerated()), id: \.element.id) { i, w in
                 if i > 0 { Divider().overlay(Color.line).padding(.leading, 72) }
                 NavigationLink(value: WorkoutRoute(id: w.workout.id)) { row(w) }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                     .background(Color.s1)
                     .swipeToDelete("Delete workout", cornerRadius: 0) { deleting = w }
                     .contextMenu {

@@ -32,6 +32,8 @@ final class MiloSession {
     private(set) var cardStates: [String: CardState] = [:]
     /// The workout exercise the last applied card added, so the workout can open it.
     private(set) var addedWorkoutExercise: UUID?
+    /// When something was last said, to start afresh after a long gap.
+    private(set) var lastActive = Date.now
     @ObservationIgnored private var undoTokens: [String: ChangeApplier.UndoToken] = [:]
     private let app: AppModel
 
@@ -41,6 +43,13 @@ final class MiloSession {
 
     var isEmpty: Bool { items.isEmpty }
 
+    /// Waiting on Milo with nothing streaming in yet: it is reading, or deciding what to do.
+    var isWorking: Bool {
+        guard busy else { return false }
+        if case .reply = items.last { return false }
+        return true
+    }
+
     func state(_ card: Milo_Card) -> CardState { cardStates[card.id] ?? .pending }
 
     // MARK: Talking
@@ -49,6 +58,7 @@ final class MiloSession {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !busy else { return }
         items.append(.user(UUID(), text))
+        lastActive = .now
         guard app.connectivity.isOnline else {
             items.append(.problem(UUID(), "Milo needs a connection. Logging by hand still works."))
             return
@@ -179,6 +189,9 @@ final class MiloSession {
         req.id = id
         guard let res = try? await app.api.milo.getConversation(request: req, headers: APIClient.headers(app.session.token)).value() else { return }
         conversationID = id
+        lastActive = .now
+        cardStates = [:]
+        undoTokens = [:]
         items = res.items.compactMap { item in
             switch item.item {
             case .userText(let t)?: .user(UUID(), t)
@@ -197,6 +210,12 @@ final class MiloSession {
             case nil: nil
             }
         }
+    }
+
+    /// Left alone for half an hour, a conversation is over: Milo opens fresh.
+    /// The old one is still under Chats.
+    func resetIfIdle(now: Date = .now) {
+        if !busy, now.timeIntervalSince(lastActive) > 30 * 60 { reset() }
     }
 
     func reset() {

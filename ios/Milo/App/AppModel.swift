@@ -14,6 +14,8 @@ final class AppModel {
     let sync: SyncEngine
     let connectivity = Connectivity()
     let health: HealthService
+    /// The conversation with Milo, kept while the app runs so closing the sheet doesn't lose it.
+    @ObservationIgnored private(set) lazy var milo = MiloSession(app: self)
 
     /// The workout cover is up. The workout itself is whichever one is running.
     var showingWorkout = false

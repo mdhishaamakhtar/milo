@@ -30,7 +30,7 @@ struct ProgressTab: View {
                             }
                             .rowStyle()
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                     }
                 }
 
@@ -53,12 +53,12 @@ struct ProgressTab: View {
                             }
                             .rowStyle()
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                     }
                 }
 
                 SectionHeader("Body")
-                NavigationLink { BodyView() } label: { bodyCard }.buttonStyle(.plain)
+                NavigationLink { BodyView() } label: { bodyCard }.buttonStyle(.row)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)

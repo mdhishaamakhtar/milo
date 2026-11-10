@@ -228,12 +228,14 @@ private struct ExerciseSetsCard: View {
                 }
                 .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.row)
             .padding(.bottom, 10)
 
+            let marks = SetMark.marks(entry.doneSets.map(\.kind))
             ForEach(Array(entry.doneSets.enumerated()), id: \.element.id) { i, s in
                 HStack(spacing: 14) {
-                    Text("\(i + 1)").font(.sofia(14, .semibold)).foregroundStyle(Color.tx3).frame(width: 16, alignment: .leading)
+                    Text(marks[i].text).font(.sofia(14, .semibold)).foregroundStyle(marks[i].isLetter ? Color.or : Color.tx3).frame(width: 16, alignment: .leading)
+                        .accessibilityLabel(s.kind == .normal ? "Set \(marks[i].text)" : s.kind.title)
                     Text(Format.set(s, m)).font(.sofia(16, .semibold))
                     if otherUnit, let kg = Maths.toKg(s.weight, s.unit), s.unit != display {
                         Text("\(Format.kgIn(kg, display)) \(display.rawValue)").font(.sofia(14, .regular)).foregroundStyle(Color.tx3)

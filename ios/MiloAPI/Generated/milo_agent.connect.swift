@@ -23,6 +23,10 @@ public protocol Milo_MiloServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `getConversation`(request: Milo_GetConversationRequest, headers: Connect.Headers) async -> ResponseMessage<Milo_GetConversationResponse>
 
+    /// Removes a conversation and what Milo remembers of it. Changes it made to the log stay.
+    @available(iOS 13, *)
+    func `deleteConversation`(request: Milo_DeleteConversationRequest, headers: Connect.Headers) async -> ResponseMessage<Milo_DeleteConversationResponse>
+
     /// Records what the user did with a card, so Milo knows on the next turn.
     @available(iOS 13, *)
     func `setCardStatus`(request: Milo_SetCardStatusRequest, headers: Connect.Headers) async -> ResponseMessage<Milo_SetCardStatusResponse>
@@ -52,6 +56,11 @@ public final class Milo_MiloServiceClient: Milo_MiloServiceClientInterface, Send
     }
 
     @available(iOS 13, *)
+    public func `deleteConversation`(request: Milo_DeleteConversationRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Milo_DeleteConversationResponse> {
+        return await self.client.unary(path: "/milo.MiloService/DeleteConversation", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `setCardStatus`(request: Milo_SetCardStatusRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Milo_SetCardStatusResponse> {
         return await self.client.unary(path: "/milo.MiloService/SetCardStatus", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -61,6 +70,7 @@ public final class Milo_MiloServiceClient: Milo_MiloServiceClientInterface, Send
             public static let send = Connect.MethodSpec(name: "Send", service: "milo.MiloService", type: .serverStream)
             public static let listConversations = Connect.MethodSpec(name: "ListConversations", service: "milo.MiloService", type: .unary)
             public static let getConversation = Connect.MethodSpec(name: "GetConversation", service: "milo.MiloService", type: .unary)
+            public static let deleteConversation = Connect.MethodSpec(name: "DeleteConversation", service: "milo.MiloService", type: .unary)
             public static let setCardStatus = Connect.MethodSpec(name: "SetCardStatus", service: "milo.MiloService", type: .unary)
         }
     }

@@ -32,6 +32,9 @@ const (
 	// MiloServiceGetConversationProcedure is the procedure name of the MiloService's GetConversation
 	// RPC.
 	MiloServiceGetConversationProcedure = "/milo.MiloService/GetConversation"
+	// MiloServiceDeleteConversationProcedure is the procedure name of the MiloService's
+	// DeleteConversation RPC.
+	MiloServiceDeleteConversationProcedure = "/milo.MiloService/DeleteConversation"
 	// MiloServiceSetCardStatusProcedure is the procedure name of the MiloService's SetCardStatus RPC.
 	MiloServiceSetCardStatusProcedure = "/milo.MiloService/SetCardStatus"
 )
@@ -58,6 +61,13 @@ var (
 			Procedure:  MiloServiceGetConversationProcedure,
 		}
 	})
+	miloServiceDeleteConversationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     milo.File_milo_agent_proto.Services().ByName("MiloService").Methods().ByName("DeleteConversation"),
+			Procedure:  MiloServiceDeleteConversationProcedure,
+		}
+	})
 	miloServiceSetCardStatusSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -73,6 +83,8 @@ type MiloServiceClient interface {
 	Send(context.Context, *milo.SendRequest) (MiloServiceSendClientStream, error)
 	ListConversations(context.Context, *milo.ListConversationsRequest) (*milo.ListConversationsResponse, error)
 	GetConversation(context.Context, *milo.GetConversationRequest) (*milo.GetConversationResponse, error)
+	// Removes a conversation and what Milo remembers of it. Changes it made to the log stay.
+	DeleteConversation(context.Context, *milo.DeleteConversationRequest) (*milo.DeleteConversationResponse, error)
 	// Records what the user did with a card, so Milo knows on the next turn.
 	SetCardStatus(context.Context, *milo.SetCardStatusRequest) (*milo.SetCardStatusResponse, error)
 }
@@ -109,6 +121,8 @@ type MiloServiceHandler interface {
 	Send(context.Context, *milo.SendRequest, MiloServiceSendServerStream) error
 	ListConversations(context.Context, *milo.ListConversationsRequest) (*milo.ListConversationsResponse, error)
 	GetConversation(context.Context, *milo.GetConversationRequest) (*milo.GetConversationResponse, error)
+	// Removes a conversation and what Milo remembers of it. Changes it made to the log stay.
+	DeleteConversation(context.Context, *milo.DeleteConversationRequest) (*milo.DeleteConversationResponse, error)
 	// Records what the user did with a card, so Milo knows on the next turn.
 	SetCardStatus(context.Context, *milo.SetCardStatusRequest) (*milo.SetCardStatusResponse, error)
 }
@@ -120,6 +134,7 @@ func RegisterMiloServiceHandler(server *connect.Server, svc MiloServiceHandler) 
 		connect.Method{Spec: miloServiceSendSpec(), Handler: adapter.send},
 		connect.Method{Spec: miloServiceListConversationsSpec(), Handler: adapter.listConversations},
 		connect.Method{Spec: miloServiceGetConversationSpec(), Handler: adapter.getConversation},
+		connect.Method{Spec: miloServiceDeleteConversationSpec(), Handler: adapter.deleteConversation},
 		connect.Method{Spec: miloServiceSetCardStatusSpec(), Handler: adapter.setCardStatus},
 	)
 }
@@ -154,6 +169,10 @@ func (UnimplementedMiloServiceHandler) GetConversation(context.Context, *milo.Ge
 	return nil, connect.NewError(connect.CodeUnimplemented, "milo.MiloService.GetConversation is not implemented")
 }
 
+func (UnimplementedMiloServiceHandler) DeleteConversation(context.Context, *milo.DeleteConversationRequest) (*milo.DeleteConversationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "milo.MiloService.DeleteConversation is not implemented")
+}
+
 func (UnimplementedMiloServiceHandler) SetCardStatus(context.Context, *milo.SetCardStatusRequest) (*milo.SetCardStatusResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "milo.MiloService.SetCardStatus is not implemented")
 }
@@ -181,6 +200,14 @@ func (c *miloServiceClient) ListConversations(ctx context.Context, req *milo.Lis
 func (c *miloServiceClient) GetConversation(ctx context.Context, req *milo.GetConversationRequest) (*milo.GetConversationResponse, error) {
 	var res milo.GetConversationResponse
 	if err := c.client.CallUnary(ctx, miloServiceGetConversationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *miloServiceClient) DeleteConversation(ctx context.Context, req *milo.DeleteConversationRequest) (*milo.DeleteConversationResponse, error) {
+	var res milo.DeleteConversationResponse
+	if err := c.client.CallUnary(ctx, miloServiceDeleteConversationSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -222,6 +249,18 @@ func (h miloServiceHandler) getConversation(ctx context.Context, _ connect.Spec,
 		return err
 	}
 	res, err := h.svc.GetConversation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h miloServiceHandler) deleteConversation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req milo.DeleteConversationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteConversation(ctx, &req)
 	if err != nil {
 		return err
 	}

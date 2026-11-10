@@ -112,7 +112,7 @@ struct ExercisesView: View {
                         .frame(height: 34)
                         .background(filter == f ? Color.tx : Color.s2, in: .capsule)
                         .overlay(Capsule().strokeBorder(filter == f ? Color.clear : Color.line))
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                         .accessibilityAddTraits(filter == f ? .isSelected : [])
                 }
             }
@@ -140,7 +140,7 @@ struct ExercisesView: View {
             .frame(minHeight: 58)
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.row)
         .background(Color.s1)
 
         if row.exercise.builtin {

@@ -141,7 +141,7 @@ struct BodyView: View {
             .frame(minHeight: 54)
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.row)
     }
 
     /// "12 Mar 2001" from the stored "2001-03-12".

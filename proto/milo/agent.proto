@@ -12,6 +12,8 @@ service MiloService {
   rpc Send(SendRequest) returns (stream SendResponse);
   rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
   rpc GetConversation(GetConversationRequest) returns (GetConversationResponse);
+  // Removes a conversation and what Milo remembers of it. Changes it made to the log stay.
+  rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
   // Records what the user did with a card, so Milo knows on the next turn.
   rpc SetCardStatus(SetCardStatusRequest) returns (SetCardStatusResponse);
 }
@@ -139,7 +141,8 @@ message ChartPoint {
 message Conversation {
   string id = 1;
   string title = 2;
-  // What came of it, e.g. "Changed 3 sets".
+  // What came of it: the changes that were applied ("Started Pull Day · Logged 4 sets"),
+  // or how Milo's answer began.
   string summary = 3;
   google.protobuf.Timestamp updated_at = 4;
 }
@@ -171,6 +174,12 @@ message GetConversationResponse {
   Conversation conversation = 1;
   repeated MiloItem items = 2;
 }
+
+message DeleteConversationRequest {
+  string id = 1;
+}
+
+message DeleteConversationResponse {}
 
 message SetCardStatusRequest {
   string card_id = 1;

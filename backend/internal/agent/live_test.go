@@ -113,4 +113,75 @@ func TestLiveEvals(t *testing.T) {
 			t.Fatalf("logged card = %v, errors %v", logged, ev.errs)
 		}
 	})
+
+	// cardsOf picks the cards of one kind out of a turn.
+	cardsOf := func(ev events, kind milo.CardKind) []*milo.Card {
+		var out []*milo.Card
+		for _, c := range ev.cards {
+			if c.GetKind() == kind {
+				out = append(out, c)
+			}
+		}
+		return out
+	}
+	describe := func(t *testing.T, ev events) {
+		t.Helper()
+		t.Logf("milo: %s", ev.text)
+		for _, c := range ev.cards {
+			t.Logf("  card %s: %q / %q, auto %v, %v", c.GetKind(), c.GetTitle(), c.GetSubtitle(), c.GetAutoApply(), rowsOf(c))
+		}
+	}
+
+	t.Run("start a workout and log into it in one message, then finish", func(t *testing.T) {
+		// Finish whatever the earlier cases left running, as the phone would have.
+		if _, err := env.Pool.Exec(context.Background(), "UPDATE workouts SET ended_at = now() WHERE ended_at IS NULL"); err != nil {
+			t.Fatal(err)
+		}
+		ev := send(t, env, ctx, "", "Start a workout with bench press and barbell squat. I just did bench: 60 kg for 8, 8 and 7.", &milo.MiloContext{Screen: "today", Timezone: "Asia/Kolkata"})
+		describe(t, ev)
+		done := cardsOf(ev, milo.CardKind_CARD_KIND_DONE)
+		if len(ev.errs) > 0 || len(done) != 2 || rowsOf(done[0])["workout"] != 1 || rowsOf(done[0])["workout_exercise"] != 2 || rowsOf(done[1])["set"] != 3 {
+			t.Fatalf("want a started workout with two exercises, then three logged sets; errors %v", ev.errs)
+		}
+		for _, c := range done {
+			apply(t, env, ctx, c)
+		}
+		ev = send(t, env, ctx, ev.done, "That's me done for today, wrap it up.", &milo.MiloContext{Screen: "today", Timezone: "Asia/Kolkata"})
+		describe(t, ev)
+		done = cardsOf(ev, milo.CardKind_CARD_KIND_DONE)
+		if len(done) != 1 || !strings.HasPrefix(done[0].GetTitle(), "Finished") || rowsOf(done[0])["workout_exercise deleted"] != 1 {
+			t.Fatalf("want one Finished card that drops the squat nobody did")
+		}
+		apply(t, env, ctx, done[0])
+	})
+
+	t.Run("deleting takes a tap; settings and a body reading don't", func(t *testing.T) {
+		ev := send(t, env, ctx, "", "Delete the shoulders workout from 6 October. Also show my totals in pounds from now on, and I weighed 81.5 kg this morning.", &milo.MiloContext{Screen: "history", Timezone: "UTC"})
+		describe(t, ev)
+		change, done := cardsOf(ev, milo.CardKind_CARD_KIND_CHANGE), cardsOf(ev, milo.CardKind_CARD_KIND_DONE)
+		if len(change) != 1 || !change[0].GetDestructive() || change[0].GetAutoApply() || rowsOf(change[0])["workout deleted"] != 1 {
+			t.Fatalf("want one delete card that waits for a tap")
+		}
+		var settings, reading bool
+		for _, c := range done {
+			settings = settings || rowsOf(c)["settings"] == 1
+			reading = reading || rowsOf(c)["body_measurement"] == 1
+		}
+		if !settings || !reading {
+			t.Fatalf("want the unit switched and the reading logged straight away (settings %v, reading %v)", settings, reading)
+		}
+	})
+
+	t.Run("a month in one read, and honesty about what it can't do", func(t *testing.T) {
+		ev := send(t, env, ctx, "", "What have I trained most this past month, and am I neglecting anything?", &milo.MiloContext{Screen: "progress", Timezone: "UTC"})
+		describe(t, ev)
+		if len(ev.errs) > 0 || len(ev.readings) == 0 || len(ev.cards) > 1 {
+			t.Fatalf("want an answer from the log: errors %v, readings %v", ev.errs, ev.readings)
+		}
+		ev = send(t, env, ctx, ev.done, "Thanks. Can you change my password to hunter2 and connect Apple Health?", &milo.MiloContext{Screen: "progress", Timezone: "UTC"})
+		describe(t, ev)
+		if len(ev.cards) != 0 || !strings.Contains(ev.text, "Profile") {
+			t.Fatalf("want no cards and a pointer to Profile")
+		}
+	})
 }

@@ -116,6 +116,8 @@ func (s *Service) run(ctx context.Context, t *turn, text string, first bool) err
 		pending = append(pending, msg.ToParam())
 
 		if msg.StopReason != anthropic.StopReasonToolUse {
+			// Until a card is applied, the chat list shows how Milo's first answer began.
+			_ = s.q.SetConversationSummaryIfEmpty(ctx, query.SetConversationSummaryIfEmptyParams{ID: t.convID, Summary: truncate(said.String(), summaryLength)})
 			return s.persistMessages(ctx, t.convID, t.userID, pending)
 		}
 		var results []anthropic.ContentBlockParamUnion

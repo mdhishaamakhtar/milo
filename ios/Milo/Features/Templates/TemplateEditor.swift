@@ -216,7 +216,7 @@ struct TemplateEditor: View {
                     }
                     .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 .listRowBackground(Color.s1)
             }
             Button { creating = trimmedQuery } label: {
@@ -240,7 +240,7 @@ struct TemplateEditor: View {
                 .autocorrectionDisabled()
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Color.tx3) }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                     .accessibilityLabel("Clear")
             }
         }

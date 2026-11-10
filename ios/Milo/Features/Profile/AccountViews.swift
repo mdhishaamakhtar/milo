@@ -107,6 +107,7 @@ struct DeleteAccountView: View {
             do {
                 _ = try await app.api.auth.deleteAccount(request: req, headers: APIClient.headers(app.session.token)).value()
                 app.showingProfile = false
+                app.milo.reset()
                 try app.session.forget()
             } catch {
                 problem = error.localizedDescription
@@ -167,7 +168,7 @@ struct ExportView: View {
             .frame(minHeight: 62)
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.row)
     }
 
     private func make() {

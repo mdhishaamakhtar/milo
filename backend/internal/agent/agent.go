@@ -69,7 +69,7 @@ func (s *Service) Send(ctx context.Context, req *milo.SendRequest, stream miloco
 	first := req.GetConversationId() == ""
 	var convID uuid.UUID
 	if first {
-		conv, err := s.q.CreateConversation(ctx, query.CreateConversationParams{ID: newID(), UserID: userID, Title: truncate(text, 48)})
+		conv, err := s.q.CreateConversation(ctx, query.CreateConversationParams{ID: newID(), UserID: userID, Title: truncate(text, titleLength)})
 		if err != nil {
 			return internal(err)
 		}
@@ -212,15 +212,35 @@ func (s *Service) SetCardStatus(ctx context.Context, req *milo.SetCardStatusRequ
 	if err != nil {
 		return nil, internal(err)
 	}
-	if status == "applied" {
-		var card milo.Card
-		if protojson.Unmarshal(row.Payload, &card) == nil {
-			// What came of the conversation, for the list of earlier ones.
-			_ = s.q.SetConversationSummary(ctx, query.SetConversationSummaryParams{ID: row.ConversationID, Summary: card.GetAppliedTitle()})
+	// What came of the conversation, for the list of chats: everything applied so far.
+	if status == "applied" || status == "undone" {
+		if titles, err := s.q.AppliedCardTitles(ctx, row.ConversationID); err == nil && len(titles) > 0 {
+			_ = s.q.SetConversationSummary(ctx, query.SetConversationSummaryParams{ID: row.ConversationID, Summary: truncate(strings.Join(titles, " · "), summaryLength)})
 		}
 	}
 	return &milo.SetCardStatusResponse{}, nil
 }
+
+func (s *Service) DeleteConversation(ctx context.Context, req *milo.DeleteConversationRequest) (*milo.DeleteConversationResponse, error) {
+	id, err := uuid.Parse(req.GetId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "id is not a UUID")
+	}
+	n, err := s.q.DeleteConversation(ctx, query.DeleteConversationParams{ID: id, UserID: auth.UserID(ctx)})
+	if err != nil {
+		return nil, internal(err)
+	}
+	if n == 0 {
+		return nil, connect.NewError(connect.CodeNotFound, "No such conversation.")
+	}
+	return &milo.DeleteConversationResponse{}, nil
+}
+
+// A chat's title is how its first message began; its summary is one line.
+const (
+	titleLength   = 60
+	summaryLength = 120
+)
 
 // internal logs an unexpected error and tells the client only that it happened.
 func internal(err error) error {

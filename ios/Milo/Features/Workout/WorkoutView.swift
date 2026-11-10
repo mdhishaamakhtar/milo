@@ -44,7 +44,11 @@ private struct WorkoutScreen: View {
             // One stable container: an inset on a ScrollView belongs to that scroll view, and
             // switching content would rebuild the add field and drop its focus.
             ZStack { content }
-                .safeAreaInset(edge: .bottom) { bottom }
+                .safeAreaInset(edge: .bottom) {
+                    bottom
+                        .animation(.settle, value: model.editing != nil)
+                        .animation(.settle, value: model.restEndsAt != nil)
+                }
                 .miloScreen()
                 .toolbar { toolbar }
                 .navigationBarTitleDisplayMode(.inline)
@@ -88,26 +92,31 @@ private struct WorkoutScreen: View {
                     VStack(alignment: .leading, spacing: 14) {
                         if !model.finished.isEmpty { FinishedCard(entries: model.finished) }
                         if let current = model.current {
-                            ExerciseCard(entry: current).id(current.id)
+                            ExerciseCard(entry: current).id(current.id).transition(.arrive)
                         }
                         if !model.upNext.isEmpty { UpNext(entries: model.upNext) }
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
                     .padding(.bottom, 16)
+                    // Exercises change place as they are finished, opened or added.
+                    .animation(.settle, value: model.current?.id)
+                    .animation(.settle, value: model.entries.map(\.id))
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onChange(of: model.current?.id) { _, id in withAnimation { proxy.scrollTo(id, anchor: .top) } }
+                .onChange(of: model.current?.id) { _, id in withAnimation(.settle) { proxy.scrollTo(id, anchor: .top) } }
             }
         }
     }
 
     @ViewBuilder private var bottom: some View {
         if model.editing != nil {
-            NumberPad().transition(.move(edge: .bottom))
+            NumberPad().transition(.move(edge: .bottom).combined(with: .opacity))
         } else {
             VStack(spacing: 8) {
-                if let end = model.restEndsAt, !talking { RestBar(endsAt: end) }
+                if let end = model.restEndsAt, !talking {
+                    RestBar(endsAt: end).transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 AddField(
                     placeholder: talking ? "Correct it, e.g. \"it was a cable\"" : model.entries.isEmpty ? "Exercise name, or describe it" : model.isPast ? "Add an exercise, or tell Milo" : "Next exercise, or tell Milo",
                     focused: $fieldFocused,
@@ -121,7 +130,7 @@ private struct WorkoutScreen: View {
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
             if talking {
-                Button { withAnimation(.snappy) { talking = false } } label: { Image(systemName: "chevron.left").foregroundStyle(Color.tx) }
+                Button { withAnimation(.settle) { talking = false } } label: { Image(systemName: "chevron.left").foregroundStyle(Color.tx) }
                     .accessibilityLabel("Back to the exercises")
             } else if !model.isPast {
                 Button { dismiss() } label: { Image(systemName: "chevron.down").foregroundStyle(Color.tx) }
@@ -177,14 +186,14 @@ private struct WorkoutScreen: View {
 
     private func ask(_ text: String) {
         fieldFocused = false
-        withAnimation(.snappy) { talking = true }
+        withAnimation(.settle) { talking = true }
         let context = MiloContext(screen: "workout", prompt: "", workoutID: model.detail.value?.workout.id)
         Task { await milo.send(text, context: context) }
     }
 
     /// A new exercise from Milo went into the workout: show it open.
     private func added() {
-        withAnimation(.snappy) { talking = false }
+        withAnimation(.settle) { talking = false }
         if let id = milo.addedWorkoutExercise { model.openID = id }
     }
 }
@@ -222,7 +231,7 @@ private struct EmptyStart: View {
                                 }
                                 .padding(.horizontal, 16).frame(minHeight: 58).contentShape(.rect)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                         }
                     }
                     .background(Color.s1, in: .rect(cornerRadius: Radius.card))
@@ -274,7 +283,7 @@ private struct FinishedCard: View {
         VStack(spacing: 0) {
             ForEach(Array(entries.enumerated()), id: \.element.id) { i, e in
                 if i > 0 { Divider().overlay(Color.line).padding(.leading, 52) }
-                Button { withAnimation(.snappy) { model.openID = e.id } } label: {
+                Button { withAnimation(.settle) { model.openID = e.id } } label: {
                     HStack(spacing: 12) {
                         ZStack {
                             Circle().fill(Color.or.opacity(0.16))
@@ -287,7 +296,7 @@ private struct FinishedCard: View {
                     }
                     .padding(.horizontal, 16).frame(minHeight: 54).contentShape(.rect)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 .background(Color.s1)
                 .swipeToDelete("Remove from workout", cornerRadius: 0) { model.askRemove(e) }
                 .contextMenu { RemoveButton(entry: e) }
@@ -318,7 +327,7 @@ private struct UpNext: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Up next").font(.cap).foregroundStyle(Color.tx3).padding(.horizontal, 4).padding(.top, 8)
             ForEach(entries) { e in
-                Button { withAnimation(.snappy) { model.openID = e.id } } label: {
+                Button { withAnimation(.settle) { model.openID = e.id } } label: {
                     HStack {
                         Text(e.exercise.name).font(.sofia(16, .medium))
                         Spacer()
@@ -326,7 +335,7 @@ private struct UpNext: View {
                     }
                     .padding(.horizontal, 4).frame(minHeight: 44).contentShape(.rect)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 .background(Color.bg)
                 .swipeToDelete("Remove from workout") { model.askRemove(e) }
                 .contextMenu { RemoveButton(entry: e) }

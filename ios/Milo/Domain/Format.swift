@@ -62,7 +62,7 @@ nonisolated enum Format {
             if m == .bodyweight, s.weight.isEmpty { return "\(done.count) × \(s.reps ?? 0)" }
             return "\(done.count) × " + set(s, m)
         }
-        let top = done.max { (Maths.toKg($0.weight, $0.unit) ?? 0) < (Maths.toKg($1.weight, $1.unit) ?? 0) }
+        let top = done.filter(\.isWorking).max { (Maths.toKg($0.weight, $0.unit) ?? 0) < (Maths.toKg($1.weight, $1.unit) ?? 0) }
         if let top, !top.weight.isEmpty {
             return "\(done.count) sets, top \(weight(top, in: entry.unit)) \(entry.unit.rawValue)"
         }

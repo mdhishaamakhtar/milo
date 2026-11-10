@@ -12,6 +12,17 @@ UPDATE milo_conversations SET updated_at = now() WHERE id = $1;
 -- name: SetConversationSummary :exec
 UPDATE milo_conversations SET summary = $2, updated_at = now() WHERE id = $1;
 
+-- name: SetConversationSummaryIfEmpty :exec
+UPDATE milo_conversations SET summary = $2 WHERE id = $1 AND summary = '';
+
+-- name: DeleteConversation :execrows
+DELETE FROM milo_conversations WHERE id = $1 AND user_id = $2;
+
+-- name: AppliedCardTitles :many
+-- What each applied card in a conversation did, oldest first.
+SELECT (payload->>'appliedTitle')::text FROM milo_items
+WHERE conversation_id = $1 AND card_status = 'applied' ORDER BY id;
+
 -- name: ListConversations :many
 SELECT * FROM milo_conversations WHERE user_id = $1 ORDER BY updated_at DESC LIMIT $2;
 

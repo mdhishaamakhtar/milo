@@ -172,6 +172,9 @@ nonisolated struct LoggedSet: Identifiable, Hashable, SyncedRecord {
     var dirty: Bool
     var syncKey: UUID { id }
 
+    /// Done, and not a warm-up: it counts toward volume, top sets and bests.
+    var isWorking: Bool { done && kind != .warmup }
+
     func input(_ measurement: MeasurementKind) -> Maths.SetInput {
         Maths.SetInput(measurement: measurement, weight: weight, unit: unit, reps: reps ?? 0, perSide: perSide, done: done, kind: kind)
     }

@@ -11,9 +11,9 @@ nonisolated struct ExerciseSession: Identifiable, Sendable {
     var summary: Maths.Summary
     var id: UUID { workout.id }
 
-    /// The heaviest set, for "30 kg × 15".
+    /// The heaviest working set, for "30 kg × 15".
     var topSet: LoggedSet? {
-        sets.max { (Maths.toKg($0.weight, $0.unit) ?? 0, $0.reps ?? 0) < (Maths.toKg($1.weight, $1.unit) ?? 0, $1.reps ?? 0) }
+        sets.filter(\.isWorking).max { (Maths.toKg($0.weight, $0.unit) ?? 0, $0.reps ?? 0) < (Maths.toKg($1.weight, $1.unit) ?? 0, $1.reps ?? 0) }
     }
 }
 

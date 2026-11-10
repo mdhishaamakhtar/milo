@@ -197,12 +197,18 @@ func minutesBetween(a time.Time, b *time.Time) int {
 	return int(b.Sub(a).Round(time.Minute) / time.Minute)
 }
 
+// truncate shortens text to one line of at most n characters, ending on a
+// whole word where it can.
 func truncate(s string, n int) string {
-	r := []rune(strings.TrimSpace(s))
+	r := []rune(strings.Join(strings.Fields(s), " "))
 	if len(r) <= n {
 		return string(r)
 	}
-	return strings.TrimSpace(string(r[:n-1])) + "…"
+	cut := string(r[:n-1])
+	if i := strings.LastIndexByte(cut, ' '); i > len(cut)*2/3 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, " ,.;:") + "…"
 }
 
 func orNone(s string) string {

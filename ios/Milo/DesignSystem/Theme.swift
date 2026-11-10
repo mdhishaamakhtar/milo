@@ -33,6 +33,19 @@ enum Radius {
     static let well: CGFloat = 13
 }
 
+// Milo's motion: quick and settled, never bouncy. Named once so every screen moves alike.
+extension Animation {
+    /// A control answering a touch: a tick, a switch, a key.
+    static let quick = Animation.snappy(duration: 0.2)
+    /// Something arriving, leaving or changing place.
+    static let settle = Animation.smooth(duration: 0.32)
+}
+
+extension AnyTransition {
+    /// How a row or card arrives: it fades up into place.
+    static let arrive = AnyTransition.opacity.combined(with: .offset(y: 8))
+}
+
 // Sofia Sans at calm sizes (the canvas's type scale), scaling with Dynamic Type.
 extension Font {
     static func sofia(_ size: CGFloat, _ weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
@@ -85,7 +98,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity, minHeight: compact ? 46 : 54)
             .background((destructive ? Color.red : Color.tx).opacity(configuration.isPressed ? 0.85 : 1), in: .capsule)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.snappy(duration: 0.18), value: configuration.isPressed)
+            .animation(.quick, value: configuration.isPressed)
     }
 }
 
@@ -101,8 +114,32 @@ struct SecondaryButtonStyle: ButtonStyle {
             .background(Color.s2.opacity(configuration.isPressed ? 0.7 : 1), in: .capsule)
             .overlay(Capsule().strokeBorder(Color.line))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.snappy(duration: 0.18), value: configuration.isPressed)
+            .animation(.quick, value: configuration.isPressed)
     }
+}
+
+/// A number pad key: it dims and dips under the finger.
+struct PadKeyStyle: ButtonStyle {
+    var fill = Color.white.opacity(0.085)
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(fill.opacity(configuration.isPressed ? 0.55 : 1), in: .rect(cornerRadius: 14))
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.quick, value: configuration.isPressed)
+    }
+}
+
+/// A tappable row: it dims under the finger, so a tap is never silent.
+struct RowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .animation(.quick, value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == RowButtonStyle {
+    static var row: RowButtonStyle { RowButtonStyle() }
 }
 
 extension ButtonStyle where Self == PrimaryButtonStyle {
@@ -152,22 +189,39 @@ struct Badge: View {
     }
 }
 
-/// Milo's mark: four bars spelling an M that ends on the tallest.
+/// Milo's mark: four bars spelling an M that ends on the tallest. While Milo is
+/// working the bars rise and fall in turn.
 struct BarMLogo: View {
     var size: CGFloat = 16
     var color: Color = .or
+    var working = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // The canvas mark: bars of 26, 14, 20 and 36 in a 48-unit box.
+    private static let bars: [CGFloat] = [26, 14, 20, 36]
 
     var body: some View {
-        // The canvas mark: bars of 26, 14, 20 and 36 in a 48-unit box.
-        HStack(alignment: .bottom, spacing: size * 3 / 48) {
-            ForEach(Array([26.0, 14, 20, 36].enumerated()), id: \.offset) { _, h in
-                RoundedRectangle(cornerRadius: size * 2.5 / 48)
-                    .fill(color)
-                    .frame(width: size * 7.5 / 48, height: size * h / 48)
+        TimelineView(.animation(paused: !working || reduceMotion)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            HStack(alignment: .bottom, spacing: size * 3 / 48) {
+                ForEach(Array(Self.bars.enumerated()), id: \.offset) { i, h in
+                    RoundedRectangle(cornerRadius: size * 2.5 / 48)
+                        .fill(color)
+                        .frame(width: size * 7.5 / 48, height: size * h / 48)
+                        .scaleEffect(y: scale(bar: i, at: t), anchor: .bottom)
+                }
             }
         }
         .frame(width: size, height: size * 36 / 48, alignment: .bottom)
+        .opacity(working && reduceMotion ? 0.6 : 1)
+        .animation(.settle, value: working)
         .accessibilityHidden(true)
+    }
+
+    /// Each bar dips to about half and comes back, one after the other.
+    private func scale(bar: Int, at t: TimeInterval) -> CGFloat {
+        guard working, !reduceMotion else { return 1 }
+        return 0.72 + 0.28 * cos(t * 2 * .pi / 1.1 - Double(bar) * 0.9)
     }
 }
 
@@ -207,7 +261,7 @@ struct DoneTick: View {
             }
         }
         .frame(width: size, height: size)
-        .animation(.snappy(duration: 0.2), value: done)
+        .animation(.quick, value: done)
     }
 }
 
@@ -235,7 +289,7 @@ struct UnitSwitch: View {
         .padding(2)
         .background(Color.well, in: .capsule)
         .overlay(Capsule().strokeBorder(Color.line2))
-        .animation(.snappy(duration: 0.18), value: unit)
+        .animation(.quick, value: unit)
         .sensoryFeedback(.selection, trigger: unit)
     }
 }

@@ -20,6 +20,7 @@ struct TodayView: View {
                 ScreenHeader(eyebrow: Format.longDay(.now), title: "Today")
                 if let running = data.value.running {
                     LiveWorkoutCard(detail: running) { app.showingWorkout = true }
+                        .workoutSource()
                         .contextMenu {
                             Button("Discard workout", systemImage: "trash", role: .destructive) { discardingRunning = true }
                         }
@@ -33,6 +34,7 @@ struct TodayView: View {
                         }
                 } else {
                     WeekCard(workouts: data.value.lastWeek) { app.startWorkout() }
+                        .workoutSource()
                 }
 
                 SectionHeader("Templates") {
@@ -59,7 +61,9 @@ struct TodayView: View {
                             }
                         }
                         .padding(.horizontal, 16)
+                        .scrollTargetLayout()
                     }
+                    .scrollTargetBehavior(.viewAligned)
                     .scrollIndicators(.hidden)
                     .padding(.horizontal, -16)
                 }
@@ -264,7 +268,7 @@ private struct TemplateCard: View {
                         .frame(width: 36, height: 36)
                         .background(Color.s3, in: .circle)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 .accessibilityLabel("Start \(summary.template.name)")
             }
         }

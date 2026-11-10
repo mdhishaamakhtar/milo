@@ -24,7 +24,7 @@ struct HistoryView: View {
                             .background(Color.s2, in: .circle)
                             .overlay(Circle().strokeBorder(Color.line2))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                     .accessibilityLabel(searching ? "Stop searching" : "Search workouts")
                 }
                 if searching { searchField.padding(.bottom, 14) }
@@ -151,7 +151,7 @@ struct MonthCalendar: View {
             Image(systemName: icon).font(.system(size: 13, weight: .bold)).frame(width: 34, height: 34)
                 .background(Color.s2, in: .circle)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.row)
         .accessibilityLabel(label)
     }
 
@@ -181,7 +181,7 @@ struct MonthCalendar: View {
                     .background(Color.or.opacity(0.2), in: .circle)
                     .overlay { if isToday { Circle().strokeBorder(Color.tx, lineWidth: 1.5) } }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.row)
             .accessibilityLabel("\(Format.longDay(day)), \(trained.workout.name)")
         } else {
             number.foregroundStyle(isToday ? Color.tx : future ? Color.tx3 : Color.tx2)

@@ -1,4 +1,5 @@
 import Charts
+import GRDB
 import MiloAPI
 import SwiftProtobuf
 import SwiftUI
@@ -15,15 +16,31 @@ struct CardView: View {
     var openExercise: ((UUID) -> Void)?
     var editTemplate: ((UUID) -> Void)?
 
+    @Environment(AppModel.self) private var app
+    @State private var editingExercise: Exercise?
+
     var body: some View {
         let state = session.state(card)
-        switch (card.kind, state) {
-        case (.done, _), (_, .applied) where card.kind != .chart && card.kind != .workout:
-            AppliedBanner(card: card, state: state, open: startsWorkout ? openRunning : nil) { session.undo(card) }
-        case (.change, _) where card.lines.count == 1 && card.lines[0].label == "Workout name":
-            renameCard(state)
-        default:
-            fullCard(state)
+        Group {
+            switch (card.kind, state) {
+            case (.done, _), (_, .applied) where card.kind != .chart && card.kind != .workout:
+                AppliedBanner(card: card, state: state, open: startsWorkout ? openRunning : nil) { session.undo(card) }
+            case (.change, _) where card.lines.count == 1 && card.lines[0].label == "Workout name":
+                renameCard(state)
+            default:
+                fullCard(state)
+            }
+        }
+        .transition(.opacity)
+        .animation(.settle, value: state)
+        .sheet(item: $editingExercise) { ExerciseForm(exercise: $0) }
+        .sensoryFeedback(trigger: state) { _, now in
+            switch now {
+            case .applied: .success
+            case .undone: .impact(weight: .light)
+            case .stale: .warning
+            default: nil
+            }
         }
     }
 
@@ -195,7 +212,13 @@ struct CardView: View {
                     if session.apply(card) { onAdded?() }
                 }
                 .buttonStyle(.primaryCompact)
-                Button("Edit") { session.dismiss(card) }.buttonStyle(.secondary).frame(width: 110)
+                Button("Edit") {
+                    // Add it as Milo read it, then open it to correct.
+                    guard session.apply(card), let id = UUID(protoID: card.exerciseID) else { return }
+                    onAdded?()
+                    editingExercise = try? app.db.writer.read { try Exercise.fetchOne($0, key: id) }
+                }
+                .buttonStyle(.secondary).frame(width: 110)
             }
             .padding(.top, 16)
         case (.change, .pending):
@@ -254,10 +277,10 @@ private struct AppliedBanner: View {
     var open: (() -> Void)?
     let undo: () -> Void
 
-    /// Under the title: the sets for logged sets, else whatever the card says about itself.
+    /// Under the title: what the card says about itself, then the sets if it logged any.
     private var detail: String {
-        let sets = card.lines.filter { $0.label.hasPrefix("Set ") }.map(\.after)
-        return (sets + [card.subtitle]).filter { !$0.isEmpty }.joined(separator: " · ")
+        let sets = card.kind == .done ? card.lines.filter { $0.label.hasPrefix("Set ") }.map(\.after).joined(separator: ", ") : ""
+        return [card.subtitle, sets].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     var body: some View {
@@ -272,7 +295,7 @@ private struct AppliedBanner: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(state == .undone ? "Undone" : card.appliedTitle).font(.sofia(16, .semibold)).lineLimit(2)
                 if !detail.isEmpty {
-                    Text(detail).font(.sofia(13.5, .regular)).foregroundStyle(Color.tx2).lineLimit(2)
+                    Text(detail).font(.sofia(13.5, .regular)).foregroundStyle(Color.tx2).lineLimit(3)
                 }
             }
             Spacer(minLength: 6)

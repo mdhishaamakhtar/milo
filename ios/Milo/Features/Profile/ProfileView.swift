@@ -136,6 +136,7 @@ struct ProfileView: View {
         Task {
             await app.sync.sync()
             _ = await app.api.auth.logout(request: Milo_LogoutRequest(), headers: APIClient.headers(app.session.token))
+            app.milo.reset()
             app.session.signOut()
             dismiss()
         }

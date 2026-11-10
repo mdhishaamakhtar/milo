@@ -136,6 +136,7 @@ struct FinishView: View {
             if saveTemplate { try app.db.templateFrom(workout: d.workout.id, name: name) }
             if saveToHealth { Task { await app.health.save(workoutID: d.workout.id) } }
             app.edited()
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch {
             log.error("finish: \(error.localizedDescription)")
         }

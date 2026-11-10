@@ -43,6 +43,32 @@ func (q *Queries) AddUsage(ctx context.Context, arg AddUsageParams) error {
 	return err
 }
 
+const appliedCardTitles = `-- name: AppliedCardTitles :many
+SELECT (payload->>'appliedTitle')::text FROM milo_items
+WHERE conversation_id = $1 AND card_status = 'applied' ORDER BY id
+`
+
+// What each applied card in a conversation did, oldest first.
+func (q *Queries) AppliedCardTitles(ctx context.Context, conversationID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, appliedCardTitles, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var column_1 string
+		if err := rows.Scan(&column_1); err != nil {
+			return nil, err
+		}
+		items = append(items, column_1)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const bodyMeasurementsFor = `-- name: BodyMeasurementsFor :many
 SELECT id, user_id, measured_at, weight_kg, body_fat_pct, source, updated_at, deleted_at, server_seq FROM body_measurements WHERE user_id = $1 AND deleted_at IS NULL ORDER BY measured_at DESC LIMIT $2
 `
@@ -106,6 +132,23 @@ func (q *Queries) CreateConversation(ctx context.Context, arg CreateConversation
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteConversation = `-- name: DeleteConversation :execrows
+DELETE FROM milo_conversations WHERE id = $1 AND user_id = $2
+`
+
+type DeleteConversationParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) DeleteConversation(ctx context.Context, arg DeleteConversationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteConversation, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const exercisePrefFor = `-- name: ExercisePrefFor :one
@@ -864,6 +907,20 @@ type SetConversationSummaryParams struct {
 
 func (q *Queries) SetConversationSummary(ctx context.Context, arg SetConversationSummaryParams) error {
 	_, err := q.db.Exec(ctx, setConversationSummary, arg.ID, arg.Summary)
+	return err
+}
+
+const setConversationSummaryIfEmpty = `-- name: SetConversationSummaryIfEmpty :exec
+UPDATE milo_conversations SET summary = $2 WHERE id = $1 AND summary = ''
+`
+
+type SetConversationSummaryIfEmptyParams struct {
+	ID      uuid.UUID
+	Summary string
+}
+
+func (q *Queries) SetConversationSummaryIfEmpty(ctx context.Context, arg SetConversationSummaryIfEmptyParams) error {
+	_, err := q.db.Exec(ctx, setConversationSummaryIfEmpty, arg.ID, arg.Summary)
 	return err
 }
 

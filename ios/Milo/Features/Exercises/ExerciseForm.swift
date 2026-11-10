@@ -90,6 +90,7 @@ struct ExerciseForm: View {
                 e.measurement = measurement
                 e.unilateral = unilateral
                 e.primaryMuscles = (muscle.isEmpty ? [] : [muscle]) + e.primaryMuscles.dropFirst().filter { $0 != muscle }
+                e.approximate = false // they've looked it over, so it is no longer Milo's guess
                 try app.db.save(e)
                 onSave(e)
             } else {
