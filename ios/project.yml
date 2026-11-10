@@ -1,0 +1,122 @@
+name: Milo
+options:
+  bundleIdPrefix: dev.hishaam
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    TARGETED_DEVICE_FAMILY: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    # Simulator builds sign ad hoc, so the test bundle loads into the signed app.
+    "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": "-"
+  configs:
+    Debug:
+      MILO_API_URL: "http://localhost:8080"
+    Release:
+      MILO_API_URL: "https://milo-api.up.railway.app"
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: 7.12.0
+  Connect:
+    url: https://github.com/connectrpc/connect-swift
+    from: 1.2.3
+  SwiftProtobuf:
+    url: https://github.com/apple/swift-protobuf
+    from: 1.39.0
+targets:
+  MiloAPI:
+    type: framework
+    platform: iOS
+    sources:
+      - path: MiloAPI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.hishaam.milo.api
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+        SKIP_INSTALL: YES
+    dependencies:
+      - package: Connect
+        product: Connect
+      - package: SwiftProtobuf
+        product: SwiftProtobuf
+  Milo:
+    type: application
+    platform: iOS
+    sources:
+      - path: Milo
+        excludes:
+          - "**/*.md"
+    entitlements:
+      path: Milo/Milo.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
+    info:
+      path: Milo/Info.plist
+      properties:
+        CFBundleDisplayName: Milo
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "1"
+        MILO_API_URL: $(MILO_API_URL)
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIUserInterfaceStyle: Dark
+        UIAppFonts: [SofiaSans.ttf]
+        ITSAppUsesNonExemptEncryption: false
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSHealthShareUsageDescription: Milo reads your body weight, height, date of birth and sex to estimate calories and to count bodyweight and assisted sets honestly.
+        NSHealthUpdateUsageDescription: Milo saves your finished workouts and the active energy they burned to Apple Health.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.hishaam.milo
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - target: MiloAPI
+      - package: GRDB
+      - package: Connect
+        product: Connect
+      - package: SwiftProtobuf
+        product: SwiftProtobuf
+      - sdk: HealthKit.framework
+  MiloTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MiloTests
+      - path: ../testdata
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: Milo
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Milo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Milo
+schemes:
+  Milo:
+    build:
+      targets:
+        Milo: all
+        MiloTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [MiloTests]
