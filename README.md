@@ -17,6 +17,7 @@ Think: "Start my pull day, I did rows at 60 for 8 and 8" or "What have I neglect
 - Log workouts set by set, with last time's numbers filled in and a rest timer
 - Works offline; the phone owns the log and syncs when it can
 - Ask Milo: an agent that can do anything the buttons can (start and finish workouts, log and fix sets, build templates), with every change undoable and every edit or delete approved by you first
+- Milo answers by showing: every lift side by side with its trend, charts that compare lifts, weeks trained as bars, sets by muscle and what you've dropped, with a tap for the likely next question
 - Turns a described movement into a real exercise with muscles, equipment and how it's counted
 - Mixed units: each exercise keeps kg or lb, and weights are stored exactly as typed
 - Progress per exercise (top set, volume, estimated 1RM), new bests, and weeks trained
@@ -49,7 +50,7 @@ make ios                # opens the app in Xcode; press Run
 
 In the app, create an account with the invite code from your `.env`.
 
-Without `ANTHROPIC_API_KEY_MILO` everything works except Milo, which says it isn't set up.
+Without `ANTHROPIC_API_KEY_MILO` everything works except Milo, which says it isn't set up. `MILO_MODEL` picks the Claude model Milo runs on; it defaults to Haiku.
 
 ## Manual Dev Setup
 
@@ -104,6 +105,7 @@ This generates `ios/Milo.xcodeproj` and opens it. Pick an iPhone simulator and p
 | `make phone` | root | Release build installed on a plugged-in iPhone (needs `MILO_TEAM_ID`) |
 | `make lint` | root | `buf lint` and `go vet` |
 | `make live` | root | Milo against the real Claude API (needs a key; costs about a cent) |
+| `make battery AS=username` | root | About 60 real questions to Milo over that user's history in the local database (about 15 cents) |
 
 ## Project Structure
 

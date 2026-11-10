@@ -1,6 +1,6 @@
 # Working on Milo
 
-Read the README's "Run it" first; this picks up once the app is running.
+Read the README's Quick Start first; this picks up once the app is running.
 
 ## The loop
 
@@ -40,6 +40,8 @@ These are the things a reviewer will ask for.
   or the app traps at run time; `Speech/Dictation.swift` shows the pattern.
 - **Motion.** Use `.quick` for a control answering a touch and `.settle` for
   things arriving or moving (`DesignSystem/Theme.swift`). Don't invent timings.
+- **Room.** Stacked text takes its gap from `Space` in the same file, and a
+  tab's line under its title is a `TitleLine`. Don't write 1 to 4 point gaps.
 
 Commits follow `type(scope): what changed`, with a body that says why when the
 why isn't obvious.
@@ -56,14 +58,19 @@ why isn't obvious.
    back to it, so say how to fix it.
 3. If it changes data, build rows with the `rows` package and send them with
    `t.emitCard`. Set `AutoApply` for a "do" tool; add `Base` versions for a
-   "propose" tool that edits existing rows.
+   "propose" tool that edits existing rows. A "show" tool returns the numbers
+   it drew, so Milo can talk about them without reading again. A tool that only
+   reads is registered with `readTool`, which lets it run beside other reads.
 4. Register it in `tools.go`, in the group it belongs to, with a description
    that says when to use it and when not to.
 5. If it changes when Milo should act, say so in the prompt (`prompt.go`).
 6. Test it in `tools_test.go` with the `call` helper, which drives the tool the
    way the model would and hands back the cards.
 
-The phone needs no change unless you add a card kind: it applies any rows.
+The phone needs no change unless you add a card kind: it applies any rows. A
+new kind is drawn in `ios/Milo/Features/Milo/CardView.swift`, and the app must
+ship with the server, since an older app shows a kind it doesn't know as a
+plain list.
 
 ### Add a field to a synced row
 
@@ -101,3 +108,9 @@ The phone needs no change unless you add a card kind: it applies any rows.
 costs about a cent, so run it when you change the prompt or a tool's
 description, not on every commit. It prints what Milo said and the cards it
 made; read them, since a passing check can still be a clumsy answer.
+
+`make battery AS=username` asks Milo about 60 questions people really ask
+(progress, habits, logging, coaching, the edges) over that user's history in
+your local database, and writes each answer, the tools it took and how long it
+took to a report. It costs about 15 cents on Haiku. Run it before and after a
+change to the prompt or the tools and compare the two reports.
