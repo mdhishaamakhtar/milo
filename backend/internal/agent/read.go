@@ -107,10 +107,61 @@ func (t *turn) getWorkouts(ctx context.Context, in workoutsInput) (any, error) {
 	case span != "":
 		t.reading(ctx, "Found no workouts on "+span)
 	}
+	body := t.bodyKg(ctx)
 	out := make([]map[string]any, len(details))
 	for i, d := range details {
-		out[i] = t.workoutJSON(d)
+		out[i] = t.workoutJSON(d, body)
 	}
+	return map[string]any{"workouts": out}, nil
+}
+
+type listWorkoutsInput struct {
+	DateFrom string `json:"date_from,omitempty" jsonschema_description:"YYYY-MM-DD. Defaults to the start of the log."`
+	DateTo   string `json:"date_to,omitempty" jsonschema_description:"YYYY-MM-DD. Defaults to today."`
+	Search   string `json:"search,omitempty" jsonschema_description:"Only workouts whose name, or one of whose exercises or muscles, contains this: \"leg\", \"push\", \"deadlift\"."`
+}
+
+// listWorkouts is one line per finished workout over any stretch, newest
+// first: enough to find or rank workouts without reading their sets.
+func (t *turn) listWorkouts(ctx context.Context, in listWorkoutsInput) (any, error) {
+	from, to, err := t.span(cmp.Or(in.DateFrom, "2000-01-01"), in.DateTo, 0)
+	if err != nil {
+		return nil, err
+	}
+	details, err := t.finishedBetween(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	search, body := strings.ToLower(strings.TrimSpace(in.Search)), t.bodyKg(ctx)
+	out := []map[string]any{}
+	for _, d := range slices.Backward(details) {
+		sets := map[string]int{} // working sets per muscle
+		matches := search == "" || strings.Contains(strings.ToLower(d.w.Name), search)
+		for _, e := range d.exercises {
+			matches = matches || strings.Contains(strings.ToLower(e.row.ExerciseName), search)
+			for _, m := range e.row.PrimaryMuscles {
+				matches = matches || strings.Contains(m, search)
+				sets[m] += maths.WorkingSets(setInputs(e.row.Measurement, e.sets))
+			}
+		}
+		if !matches {
+			continue
+		}
+		muscles := sortedByCount(sets)
+		row := map[string]any{
+			"workout_id": d.w.ID.String(), "name": d.w.Name, "date": t.day(d.w.StartedAt), "minutes": minutesBetween(d.w.StartedAt, d.w.EndedAt),
+			"exercises": len(d.exercises), "sets": d.doneSets(), "volume": kgText(d.volumeKg(), t.displayUnit), "muscles": muscles[:min(len(muscles), 3)],
+		}
+		if kcal, ok := maths.ActiveKcal(d.w.EndedAt.Sub(d.w.StartedAt).Seconds(), body, d.shares()); ok {
+			row["active_kcal_estimate"] = int(kcal + 0.5)
+		}
+		out = append(out, row)
+	}
+	what := "workouts"
+	if search != "" {
+		what = fmt.Sprintf("workouts matching %q", in.Search)
+	}
+	t.reading(ctx, fmt.Sprintf("Looked through %d %s", len(out), what))
 	return map[string]any{"workouts": out}, nil
 }
 
@@ -220,6 +271,21 @@ func (d workoutDetail) doneSets() int {
 	return n
 }
 
+// shares is each exercise's part of the workout, for calories.
+func (d workoutDetail) shares() []maths.ExerciseShare {
+	out := make([]maths.ExerciseShare, len(d.exercises))
+	for i, e := range d.exercises {
+		done := 0
+		for _, s := range e.sets {
+			if s.Done {
+				done++
+			}
+		}
+		out[i] = maths.ExerciseShare{MET: e.row.Met, DoneSets: done}
+	}
+	return out
+}
+
 func (d workoutDetail) volumeKg() float64 {
 	v := 0.0
 	for _, e := range d.exercises {
@@ -263,7 +329,7 @@ func (t *turn) loadDetails(ctx context.Context, ws []query.Workout) ([]workoutDe
 	return out, nil
 }
 
-func (t *turn) workoutJSON(d workoutDetail) map[string]any {
+func (t *turn) workoutJSON(d workoutDetail, bodyKg float64) map[string]any {
 	exercises := make([]map[string]any, len(d.exercises))
 	for i, e := range d.exercises {
 		sets := make([]map[string]any, len(e.sets))
@@ -291,6 +357,9 @@ func (t *turn) workoutJSON(d workoutDetail) map[string]any {
 	}
 	if d.w.EndedAt != nil {
 		out["minutes"] = minutesBetween(d.w.StartedAt, d.w.EndedAt)
+		if kcal, ok := maths.ActiveKcal(d.w.EndedAt.Sub(d.w.StartedAt).Seconds(), bodyKg, d.shares()); ok {
+			out["active_kcal_estimate"] = int(kcal + 0.5)
+		}
 	} else {
 		out["running"] = true
 	}
@@ -345,12 +414,9 @@ func (t *turn) bodyKg(ctx context.Context) float64 {
 	return *w
 }
 
-// shortName drops the equipment in brackets: "Chest Press (Machine)" → "chest press".
+// shortName drops the equipment in brackets and the capitals: "Chest Press (Machine)" → "chest press".
 func shortName(name string) string {
-	if i := strings.Index(name, " ("); i > 0 {
-		name = name[:i]
-	}
-	return strings.ToLower(name)
+	return strings.ToLower(shortTitle(name))
 }
 
 func nameOr(name, fallback string) string {

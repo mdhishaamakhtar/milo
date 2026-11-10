@@ -22,7 +22,8 @@ struct MiloView: View {
                 if session.isEmpty {
                     MiloHome { suggestion in Task { await send(suggestion) } }
                 } else {
-                    Conversation(session: session, openRunning: { dismiss() }, openWorkout: { path.append(WorkoutRoute(id: $0)) },
+                    Conversation(session: session, say: { reply in Task { await send(reply) } },
+                                 openRunning: { dismiss() }, openWorkout: { path.append(WorkoutRoute(id: $0)) },
                                  openExercise: { path.append(ExerciseRoute(id: $0)) },
                                  editTemplate: { id in editingTemplate = try? app.db.writer.read { try Template.fetchOne($0, key: id) } })
                 }
@@ -94,6 +95,8 @@ struct MiloView: View {
 /// What Milo says and shows, in order.
 struct Conversation: View {
     let session: MiloSession
+    /// Send one of Milo's suggested replies.
+    var say: ((String) -> Void)?
     var onAdded: (() -> Void)?
     var openRunning: (() -> Void)?
     var openWorkout: ((UUID) -> Void)?
@@ -111,6 +114,8 @@ struct Conversation: View {
     private var rows: [Row] {
         var rows: [Row] = []
         for item in session.items {
+            // What to say next only stands under the latest answer, once Milo has finished.
+            if case .card(let card) = item, card.kind == .suggestions, session.busy || item.id != session.items.last?.id { continue }
             let startsReply = rows.last.map { if case .user = $0.item { true } else { false } } ?? true
             if case .reading(_, let summary) = item {
                 if let last = rows.indices.last, case .reading = rows[last].item {
@@ -137,10 +142,11 @@ struct Conversation: View {
                         // the words change in place and the text flows in below.
                         ThinkingRow(reading: session.hasReadSinceAsking).transition(.opacity)
                     }
+                    // The end of the conversation, thinking row included: what scrolling follows.
+                    Color.clear.frame(height: 1).id(Self.end)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
-                .padding(.bottom, 16)
                 .animation(.settle, value: session.items.count)
                 .animation(.settle, value: session.isWorking)
             }
@@ -148,9 +154,14 @@ struct Conversation: View {
             .defaultScrollAnchor(.bottom)
             // Stay at the bottom while a reply streams in and grows.
             .defaultScrollAnchor(.bottom, for: .sizeChanges)
-            .onChange(of: session.items.count) { withAnimation(.settle) { proxy.scrollTo(session.items.last?.id, anchor: .bottom) } }
+            .onChange(of: session.items.count) { withAnimation(.settle) { proxy.scrollTo(Self.end, anchor: .bottom) } }
+            .onChange(of: session.isWorking) { withAnimation(.settle) { proxy.scrollTo(Self.end, anchor: .bottom) } }
+            // What to say next appears once Milo has finished.
+            .onChange(of: session.busy) { withAnimation(.settle) { proxy.scrollTo(Self.end, anchor: .bottom) } }
         }
     }
+
+    private static let end = "end"
 
     /// What you send rises from the message field into the conversation; Milo's side fades up.
     private static func arrival(_ item: MiloSession.Item) -> AnyTransition {
@@ -174,11 +185,34 @@ struct Conversation: View {
                 if row.startsReply { MiloLabel() }
                 ReadingsRow(summaries: row.readings)
             }
+        case .card(let card) where card.kind == .suggestions:
+            SuggestedReplies(replies: card.lines.map(\.label)) { say?($0) }
         case .card(let card):
             CardView(card: card, session: session, onAdded: onAdded, openRunning: openRunning, openWorkout: openWorkout, openExercise: openExercise, editTemplate: editTemplate)
         case .problem(_, let text):
             Label(text, systemImage: "exclamationmark.circle")
                 .font(.sub).foregroundStyle(Color.tx2).padding(.horizontal, 4)
+        }
+    }
+}
+
+/// What you might say next, a tap each. They sit side by side when they fit.
+private struct SuggestedReplies: View {
+    let replies: [String]
+    let say: (String) -> Void
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { buttons }
+            VStack(alignment: .leading, spacing: 8) { buttons }
+        }
+        .buttonStyle(.chip)
+        .padding(.horizontal, 2)
+    }
+
+    private var buttons: some View {
+        ForEach(replies, id: \.self) { reply in
+            Button(reply) { say(reply) }.lineLimit(1)
         }
     }
 }

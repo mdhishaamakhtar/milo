@@ -70,7 +70,7 @@ private struct WorkoutScreen: View {
 
     @ViewBuilder private var content: some View {
         if talking {
-            Conversation(session: milo, onAdded: added)
+            Conversation(session: milo, say: ask, onAdded: added)
         } else if !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
             ScrollView { MatchList(ask: ask).padding(.horizontal, 16).padding(.top, 8) }
                 .scrollDismissesKeyboard(.interactively)
@@ -215,7 +215,7 @@ private struct EmptyStart: View {
                             if i > 0 { Divider().overlay(Color.line).padding(.leading, 16) }
                             Button { model.add(m.exercise) } label: {
                                 HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    VStack(alignment: .leading, spacing: Space.rowText) {
                                         Text(m.exercise.name).font(.sofia(16, .semibold))
                                         if let d = m.lastDate {
                                             Text("Last \(Format.shortDay(d))" + (m.lastText.map { ", \($0)" } ?? "")).font(.sofia(14, .regular)).foregroundStyle(Color.tx2)

@@ -42,6 +42,15 @@ public nonisolated enum Milo_CardKind: SwiftProtobuf.Enum, Swift.CaseIterable {
 
   /// A summary of one workout. Open.
   case workout // = 6
+
+  /// Lifts side by side, each with where it started and where it is now. A row opens its exercise.
+  case progress // = 7
+
+  /// Parts of a whole as bars, e.g. sets by muscle.
+  case breakdown // = 8
+
+  /// Things the user might say next, as buttons under Milo's answer. `lines` holds them.
+  case suggestions // = 9
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -57,6 +66,9 @@ public nonisolated enum Milo_CardKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 4: self = .templateDraft
     case 5: self = .chart
     case 6: self = .workout
+    case 7: self = .progress
+    case 8: self = .breakdown
+    case 9: self = .suggestions
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -70,6 +82,9 @@ public nonisolated enum Milo_CardKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .templateDraft: return 4
     case .chart: return 5
     case .workout: return 6
+    case .progress: return 7
+    case .breakdown: return 8
+    case .suggestions: return 9
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -83,6 +98,9 @@ public nonisolated enum Milo_CardKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     .templateDraft,
     .chart,
     .workout,
+    .progress,
+    .breakdown,
+    .suggestions,
   ]
 
 }
@@ -392,11 +410,31 @@ public nonisolated struct Milo_Card: @unchecked Sendable {
     set {_uniqueStorage()._appliedTitle = newValue}
   }
 
+  /// Headline numbers above a chart: "37" over "workouts".
+  public var stats: [Milo_Stat] {
+    get {_storage._stats}
+    set {_uniqueStorage()._stats = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+public nonisolated struct Milo_Stat: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var value: String = String()
+
+  public var label: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 public nonisolated struct Milo_CardLine: Sendable {
@@ -410,6 +448,21 @@ public nonisolated struct Milo_CardLine: Sendable {
 
   public var after: String = String()
 
+  /// A short tag at the end of the row: "+15 kg", "7 Oct".
+  public var note: String = String()
+
+  /// Which way the row is going, to colour the tag: 1 up, -1 down, 0 neither.
+  public var trend: Int32 = 0
+
+  /// The row's values over time, oldest first, drawn as a small line.
+  public var spark: [Double] = []
+
+  /// The row's size against the largest row, 0 to 1, drawn as a bar.
+  public var share: Double = 0
+
+  /// The exercise the row is about, so tapping it opens that exercise.
+  public var exerciseID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -422,14 +475,37 @@ public nonisolated struct Milo_Chart: Sendable {
 
   public var title: String = String()
 
-  /// "top_set", "volume", "e1rm" or "body_weight".
+  /// "top_set", "volume", "e1rm" or "body_weight"; for bars, "workouts", "sets", "volume" or "minutes".
   public var metric: String = String()
 
   public var unit: Milo_WeightUnit = .unspecified
 
+  /// One line, or the bars.
   public var points: [Milo_ChartPoint] = []
 
   public var caption: String = String()
+
+  /// Two or more lines on the same axes, for comparing lifts. `points` is empty then.
+  public var series: [Milo_ChartSeries] = []
+
+  /// Bars, one per week or month, instead of a line.
+  public var bars: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Milo_ChartSeries: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var points: [Milo_ChartPoint] = []
+
+  public var exerciseID: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -665,7 +741,7 @@ public nonisolated struct Milo_SetCardStatusResponse: Sendable {
 fileprivate nonisolated let _protobuf_package = "milo"
 
 nonisolated extension Milo_CardKind: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CARD_KIND_UNSPECIFIED\0\u{1}CARD_KIND_NEW_EXERCISE\0\u{1}CARD_KIND_DONE\0\u{1}CARD_KIND_CHANGE\0\u{1}CARD_KIND_TEMPLATE_DRAFT\0\u{1}CARD_KIND_CHART\0\u{1}CARD_KIND_WORKOUT\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CARD_KIND_UNSPECIFIED\0\u{1}CARD_KIND_NEW_EXERCISE\0\u{1}CARD_KIND_DONE\0\u{1}CARD_KIND_CHANGE\0\u{1}CARD_KIND_TEMPLATE_DRAFT\0\u{1}CARD_KIND_CHART\0\u{1}CARD_KIND_WORKOUT\0\u{1}CARD_KIND_PROGRESS\0\u{1}CARD_KIND_BREAKDOWN\0\u{1}CARD_KIND_SUGGESTIONS\0")
 }
 
 nonisolated extension Milo_CardStatus: SwiftProtobuf._ProtoNameProviding {
@@ -1011,7 +1087,7 @@ nonisolated extension Milo_MiloError: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
 nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Card"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}kind\0\u{1}title\0\u{1}subtitle\0\u{1}lines\0\u{1}changes\0\u{1}base\0\u{1}chart\0\u{3}auto_apply\0\u{3}workout_id\0\u{3}exercise_id\0\u{1}note\0\u{1}status\0\u{3}apply_label\0\u{1}destructive\0\u{3}applied_title\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}kind\0\u{1}title\0\u{1}subtitle\0\u{1}lines\0\u{1}changes\0\u{1}base\0\u{1}chart\0\u{3}auto_apply\0\u{3}workout_id\0\u{3}exercise_id\0\u{1}note\0\u{1}status\0\u{3}apply_label\0\u{1}destructive\0\u{3}applied_title\0\u{1}stats\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -1030,6 +1106,7 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     var _applyLabel: String = String()
     var _destructive: Bool = false
     var _appliedTitle: String = String()
+    var _stats: [Milo_Stat] = []
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -1056,6 +1133,7 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       _applyLabel = source._applyLabel
       _destructive = source._destructive
       _appliedTitle = source._appliedTitle
+      _stats = source._stats
     }
   }
 
@@ -1090,6 +1168,7 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
         case 14: try { try decoder.decodeSingularStringField(value: &_storage._applyLabel) }()
         case 15: try { try decoder.decodeSingularBoolField(value: &_storage._destructive) }()
         case 16: try { try decoder.decodeSingularStringField(value: &_storage._appliedTitle) }()
+        case 17: try { try decoder.decodeRepeatedMessageField(value: &_storage._stats) }()
         default: break
         }
       }
@@ -1150,6 +1229,9 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       if !_storage._appliedTitle.isEmpty {
         try visitor.visitSingularStringField(value: _storage._appliedTitle, fieldNumber: 16)
       }
+      if !_storage._stats.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._stats, fieldNumber: 17)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1175,6 +1257,7 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
         if _storage._applyLabel != rhs_storage._applyLabel {return false}
         if _storage._destructive != rhs_storage._destructive {return false}
         if _storage._appliedTitle != rhs_storage._appliedTitle {return false}
+        if _storage._stats != rhs_storage._stats {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -1184,9 +1267,44 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
+nonisolated extension Milo_Stat: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Stat"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}value\0\u{1}label\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.value) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.value.isEmpty {
+      try visitor.visitSingularStringField(value: self.value, fieldNumber: 1)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Milo_Stat, rhs: Milo_Stat) -> Bool {
+    if lhs.value != rhs.value {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 nonisolated extension Milo_CardLine: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CardLine"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}label\0\u{1}before\0\u{1}after\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}label\0\u{1}before\0\u{1}after\0\u{1}note\0\u{1}trend\0\u{1}spark\0\u{1}share\0\u{3}exercise_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1197,6 +1315,11 @@ nonisolated extension Milo_CardLine: SwiftProtobuf.Message, SwiftProtobuf._Messa
       case 1: try { try decoder.decodeSingularStringField(value: &self.label) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.before) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.after) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.note) }()
+      case 5: try { try decoder.decodeSingularInt32Field(value: &self.trend) }()
+      case 6: try { try decoder.decodeRepeatedDoubleField(value: &self.spark) }()
+      case 7: try { try decoder.decodeSingularDoubleField(value: &self.share) }()
+      case 8: try { try decoder.decodeSingularStringField(value: &self.exerciseID) }()
       default: break
       }
     }
@@ -1212,6 +1335,21 @@ nonisolated extension Milo_CardLine: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if !self.after.isEmpty {
       try visitor.visitSingularStringField(value: self.after, fieldNumber: 3)
     }
+    if !self.note.isEmpty {
+      try visitor.visitSingularStringField(value: self.note, fieldNumber: 4)
+    }
+    if self.trend != 0 {
+      try visitor.visitSingularInt32Field(value: self.trend, fieldNumber: 5)
+    }
+    if !self.spark.isEmpty {
+      try visitor.visitPackedDoubleField(value: self.spark, fieldNumber: 6)
+    }
+    if self.share.bitPattern != 0 {
+      try visitor.visitSingularDoubleField(value: self.share, fieldNumber: 7)
+    }
+    if !self.exerciseID.isEmpty {
+      try visitor.visitSingularStringField(value: self.exerciseID, fieldNumber: 8)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1219,6 +1357,11 @@ nonisolated extension Milo_CardLine: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if lhs.label != rhs.label {return false}
     if lhs.before != rhs.before {return false}
     if lhs.after != rhs.after {return false}
+    if lhs.note != rhs.note {return false}
+    if lhs.trend != rhs.trend {return false}
+    if lhs.spark != rhs.spark {return false}
+    if lhs.share != rhs.share {return false}
+    if lhs.exerciseID != rhs.exerciseID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1226,7 +1369,7 @@ nonisolated extension Milo_CardLine: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
 nonisolated extension Milo_Chart: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Chart"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}title\0\u{1}metric\0\u{1}unit\0\u{1}points\0\u{1}caption\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}title\0\u{1}metric\0\u{1}unit\0\u{1}points\0\u{1}caption\0\u{1}series\0\u{1}bars\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1239,6 +1382,8 @@ nonisolated extension Milo_Chart: SwiftProtobuf.Message, SwiftProtobuf._MessageI
       case 3: try { try decoder.decodeSingularEnumField(value: &self.unit) }()
       case 4: try { try decoder.decodeRepeatedMessageField(value: &self.points) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.caption) }()
+      case 6: try { try decoder.decodeRepeatedMessageField(value: &self.series) }()
+      case 7: try { try decoder.decodeSingularBoolField(value: &self.bars) }()
       default: break
       }
     }
@@ -1260,6 +1405,12 @@ nonisolated extension Milo_Chart: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     if !self.caption.isEmpty {
       try visitor.visitSingularStringField(value: self.caption, fieldNumber: 5)
     }
+    if !self.series.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.series, fieldNumber: 6)
+    }
+    if self.bars != false {
+      try visitor.visitSingularBoolField(value: self.bars, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1269,6 +1420,48 @@ nonisolated extension Milo_Chart: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     if lhs.unit != rhs.unit {return false}
     if lhs.points != rhs.points {return false}
     if lhs.caption != rhs.caption {return false}
+    if lhs.series != rhs.series {return false}
+    if lhs.bars != rhs.bars {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Milo_ChartSeries: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ChartSeries"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}points\0\u{3}exercise_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.points) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.exerciseID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.points.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.points, fieldNumber: 2)
+    }
+    if !self.exerciseID.isEmpty {
+      try visitor.visitSingularStringField(value: self.exerciseID, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Milo_ChartSeries, rhs: Milo_ChartSeries) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.points != rhs.points {return false}
+    if lhs.exerciseID != rhs.exerciseID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -190,6 +190,14 @@ func dayText(t time.Time, now time.Time) string {
 	return t.Format("Mon 2 Jan")
 }
 
+// dateText is "6 Oct", with the year when it isn't the current one: a day for a title.
+func dateText(t time.Time, now time.Time) string {
+	if t.Year() != now.Year() {
+		return t.Format("2 Jan 2006")
+	}
+	return t.Format("2 Jan")
+}
+
 func minutesBetween(a time.Time, b *time.Time) int {
 	if b == nil || b.Before(a) {
 		return 0

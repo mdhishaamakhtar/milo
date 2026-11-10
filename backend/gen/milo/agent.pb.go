@@ -39,6 +39,12 @@ const (
 	CardKind_CARD_KIND_CHART CardKind = 5
 	// A summary of one workout. Open.
 	CardKind_CARD_KIND_WORKOUT CardKind = 6
+	// Lifts side by side, each with where it started and where it is now. A row opens its exercise.
+	CardKind_CARD_KIND_PROGRESS CardKind = 7
+	// Parts of a whole as bars, e.g. sets by muscle.
+	CardKind_CARD_KIND_BREAKDOWN CardKind = 8
+	// Things the user might say next, as buttons under Milo's answer. `lines` holds them.
+	CardKind_CARD_KIND_SUGGESTIONS CardKind = 9
 )
 
 // Enum value maps for CardKind.
@@ -51,6 +57,9 @@ var (
 		4: "CARD_KIND_TEMPLATE_DRAFT",
 		5: "CARD_KIND_CHART",
 		6: "CARD_KIND_WORKOUT",
+		7: "CARD_KIND_PROGRESS",
+		8: "CARD_KIND_BREAKDOWN",
+		9: "CARD_KIND_SUGGESTIONS",
 	}
 	CardKind_value = map[string]int32{
 		"CARD_KIND_UNSPECIFIED":    0,
@@ -60,6 +69,9 @@ var (
 		"CARD_KIND_TEMPLATE_DRAFT": 4,
 		"CARD_KIND_CHART":          5,
 		"CARD_KIND_WORKOUT":        6,
+		"CARD_KIND_PROGRESS":       7,
+		"CARD_KIND_BREAKDOWN":      8,
+		"CARD_KIND_SUGGESTIONS":    9,
 	}
 )
 
@@ -626,7 +638,9 @@ type Card struct {
 	// Applying removes something; the button is red.
 	Destructive bool `protobuf:"varint,15,opt,name=destructive,proto3" json:"destructive,omitempty"`
 	// What the card says once applied: "Deleted Push Day".
-	AppliedTitle  string `protobuf:"bytes,16,opt,name=applied_title,json=appliedTitle,proto3" json:"applied_title,omitempty"`
+	AppliedTitle string `protobuf:"bytes,16,opt,name=applied_title,json=appliedTitle,proto3" json:"applied_title,omitempty"`
+	// Headline numbers above a chart: "37" over "workouts".
+	Stats         []*Stat `protobuf:"bytes,17,rep,name=stats,proto3" json:"stats,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -773,18 +787,87 @@ func (x *Card) GetAppliedTitle() string {
 	return ""
 }
 
-type CardLine struct {
+func (x *Card) GetStats() []*Stat {
+	if x != nil {
+		return x.Stats
+	}
+	return nil
+}
+
+type Stat struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Label         string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
-	Before        string                 `protobuf:"bytes,2,opt,name=before,proto3" json:"before,omitempty"`
-	After         string                 `protobuf:"bytes,3,opt,name=after,proto3" json:"after,omitempty"`
+	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Stat) Reset() {
+	*x = Stat{}
+	mi := &file_milo_agent_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Stat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Stat) ProtoMessage() {}
+
+func (x *Stat) ProtoReflect() protoreflect.Message {
+	mi := &file_milo_agent_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Stat.ProtoReflect.Descriptor instead.
+func (*Stat) Descriptor() ([]byte, []int) {
+	return file_milo_agent_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *Stat) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *Stat) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+type CardLine struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Label  string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	Before string                 `protobuf:"bytes,2,opt,name=before,proto3" json:"before,omitempty"`
+	After  string                 `protobuf:"bytes,3,opt,name=after,proto3" json:"after,omitempty"`
+	// A short tag at the end of the row: "+15 kg", "7 Oct".
+	Note string `protobuf:"bytes,4,opt,name=note,proto3" json:"note,omitempty"`
+	// Which way the row is going, to colour the tag: 1 up, -1 down, 0 neither.
+	Trend int32 `protobuf:"varint,5,opt,name=trend,proto3" json:"trend,omitempty"`
+	// The row's values over time, oldest first, drawn as a small line.
+	Spark []float64 `protobuf:"fixed64,6,rep,packed,name=spark,proto3" json:"spark,omitempty"`
+	// The row's size against the largest row, 0 to 1, drawn as a bar.
+	Share float64 `protobuf:"fixed64,7,opt,name=share,proto3" json:"share,omitempty"`
+	// The exercise the row is about, so tapping it opens that exercise.
+	ExerciseId    string `protobuf:"bytes,8,opt,name=exercise_id,json=exerciseId,proto3" json:"exercise_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CardLine) Reset() {
 	*x = CardLine{}
-	mi := &file_milo_agent_proto_msgTypes[8]
+	mi := &file_milo_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -796,7 +879,7 @@ func (x *CardLine) String() string {
 func (*CardLine) ProtoMessage() {}
 
 func (x *CardLine) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[8]
+	mi := &file_milo_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -809,7 +892,7 @@ func (x *CardLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CardLine.ProtoReflect.Descriptor instead.
 func (*CardLine) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{8}
+	return file_milo_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CardLine) GetLabel() string {
@@ -833,21 +916,61 @@ func (x *CardLine) GetAfter() string {
 	return ""
 }
 
+func (x *CardLine) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+func (x *CardLine) GetTrend() int32 {
+	if x != nil {
+		return x.Trend
+	}
+	return 0
+}
+
+func (x *CardLine) GetSpark() []float64 {
+	if x != nil {
+		return x.Spark
+	}
+	return nil
+}
+
+func (x *CardLine) GetShare() float64 {
+	if x != nil {
+		return x.Share
+	}
+	return 0
+}
+
+func (x *CardLine) GetExerciseId() string {
+	if x != nil {
+		return x.ExerciseId
+	}
+	return ""
+}
+
 type Chart struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Title string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
-	// "top_set", "volume", "e1rm" or "body_weight".
-	Metric        string        `protobuf:"bytes,2,opt,name=metric,proto3" json:"metric,omitempty"`
-	Unit          WeightUnit    `protobuf:"varint,3,opt,name=unit,proto3,enum=milo.WeightUnit" json:"unit,omitempty"`
-	Points        []*ChartPoint `protobuf:"bytes,4,rep,name=points,proto3" json:"points,omitempty"`
-	Caption       string        `protobuf:"bytes,5,opt,name=caption,proto3" json:"caption,omitempty"`
+	// "top_set", "volume", "e1rm" or "body_weight"; for bars, "workouts", "sets", "volume" or "minutes".
+	Metric string     `protobuf:"bytes,2,opt,name=metric,proto3" json:"metric,omitempty"`
+	Unit   WeightUnit `protobuf:"varint,3,opt,name=unit,proto3,enum=milo.WeightUnit" json:"unit,omitempty"`
+	// One line, or the bars.
+	Points  []*ChartPoint `protobuf:"bytes,4,rep,name=points,proto3" json:"points,omitempty"`
+	Caption string        `protobuf:"bytes,5,opt,name=caption,proto3" json:"caption,omitempty"`
+	// Two or more lines on the same axes, for comparing lifts. `points` is empty then.
+	Series []*ChartSeries `protobuf:"bytes,6,rep,name=series,proto3" json:"series,omitempty"`
+	// Bars, one per week or month, instead of a line.
+	Bars          bool `protobuf:"varint,7,opt,name=bars,proto3" json:"bars,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Chart) Reset() {
 	*x = Chart{}
-	mi := &file_milo_agent_proto_msgTypes[9]
+	mi := &file_milo_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -859,7 +982,7 @@ func (x *Chart) String() string {
 func (*Chart) ProtoMessage() {}
 
 func (x *Chart) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[9]
+	mi := &file_milo_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -872,7 +995,7 @@ func (x *Chart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Chart.ProtoReflect.Descriptor instead.
 func (*Chart) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{9}
+	return file_milo_agent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Chart) GetTitle() string {
@@ -910,6 +1033,80 @@ func (x *Chart) GetCaption() string {
 	return ""
 }
 
+func (x *Chart) GetSeries() []*ChartSeries {
+	if x != nil {
+		return x.Series
+	}
+	return nil
+}
+
+func (x *Chart) GetBars() bool {
+	if x != nil {
+		return x.Bars
+	}
+	return false
+}
+
+type ChartSeries struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Points        []*ChartPoint          `protobuf:"bytes,2,rep,name=points,proto3" json:"points,omitempty"`
+	ExerciseId    string                 `protobuf:"bytes,3,opt,name=exercise_id,json=exerciseId,proto3" json:"exercise_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChartSeries) Reset() {
+	*x = ChartSeries{}
+	mi := &file_milo_agent_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChartSeries) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChartSeries) ProtoMessage() {}
+
+func (x *ChartSeries) ProtoReflect() protoreflect.Message {
+	mi := &file_milo_agent_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChartSeries.ProtoReflect.Descriptor instead.
+func (*ChartSeries) Descriptor() ([]byte, []int) {
+	return file_milo_agent_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ChartSeries) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ChartSeries) GetPoints() []*ChartPoint {
+	if x != nil {
+		return x.Points
+	}
+	return nil
+}
+
+func (x *ChartSeries) GetExerciseId() string {
+	if x != nil {
+		return x.ExerciseId
+	}
+	return ""
+}
+
 type ChartPoint struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	At            *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`
@@ -921,7 +1118,7 @@ type ChartPoint struct {
 
 func (x *ChartPoint) Reset() {
 	*x = ChartPoint{}
-	mi := &file_milo_agent_proto_msgTypes[10]
+	mi := &file_milo_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -933,7 +1130,7 @@ func (x *ChartPoint) String() string {
 func (*ChartPoint) ProtoMessage() {}
 
 func (x *ChartPoint) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[10]
+	mi := &file_milo_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -946,7 +1143,7 @@ func (x *ChartPoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChartPoint.ProtoReflect.Descriptor instead.
 func (*ChartPoint) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{10}
+	return file_milo_agent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ChartPoint) GetAt() *timestamppb.Timestamp {
@@ -984,7 +1181,7 @@ type Conversation struct {
 
 func (x *Conversation) Reset() {
 	*x = Conversation{}
-	mi := &file_milo_agent_proto_msgTypes[11]
+	mi := &file_milo_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -996,7 +1193,7 @@ func (x *Conversation) String() string {
 func (*Conversation) ProtoMessage() {}
 
 func (x *Conversation) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[11]
+	mi := &file_milo_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1009,7 +1206,7 @@ func (x *Conversation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Conversation.ProtoReflect.Descriptor instead.
 func (*Conversation) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{11}
+	return file_milo_agent_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Conversation) GetId() string {
@@ -1057,7 +1254,7 @@ type MiloItem struct {
 
 func (x *MiloItem) Reset() {
 	*x = MiloItem{}
-	mi := &file_milo_agent_proto_msgTypes[12]
+	mi := &file_milo_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1069,7 +1266,7 @@ func (x *MiloItem) String() string {
 func (*MiloItem) ProtoMessage() {}
 
 func (x *MiloItem) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[12]
+	mi := &file_milo_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1082,7 +1279,7 @@ func (x *MiloItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MiloItem.ProtoReflect.Descriptor instead.
 func (*MiloItem) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{12}
+	return file_milo_agent_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *MiloItem) GetId() int64 {
@@ -1179,7 +1376,7 @@ type ListConversationsRequest struct {
 
 func (x *ListConversationsRequest) Reset() {
 	*x = ListConversationsRequest{}
-	mi := &file_milo_agent_proto_msgTypes[13]
+	mi := &file_milo_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1191,7 +1388,7 @@ func (x *ListConversationsRequest) String() string {
 func (*ListConversationsRequest) ProtoMessage() {}
 
 func (x *ListConversationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[13]
+	mi := &file_milo_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1204,7 +1401,7 @@ func (x *ListConversationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConversationsRequest.ProtoReflect.Descriptor instead.
 func (*ListConversationsRequest) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{13}
+	return file_milo_agent_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListConversationsRequest) GetLimit() int32 {
@@ -1223,7 +1420,7 @@ type ListConversationsResponse struct {
 
 func (x *ListConversationsResponse) Reset() {
 	*x = ListConversationsResponse{}
-	mi := &file_milo_agent_proto_msgTypes[14]
+	mi := &file_milo_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1235,7 +1432,7 @@ func (x *ListConversationsResponse) String() string {
 func (*ListConversationsResponse) ProtoMessage() {}
 
 func (x *ListConversationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[14]
+	mi := &file_milo_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1248,7 +1445,7 @@ func (x *ListConversationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConversationsResponse.ProtoReflect.Descriptor instead.
 func (*ListConversationsResponse) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{14}
+	return file_milo_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListConversationsResponse) GetConversations() []*Conversation {
@@ -1267,7 +1464,7 @@ type GetConversationRequest struct {
 
 func (x *GetConversationRequest) Reset() {
 	*x = GetConversationRequest{}
-	mi := &file_milo_agent_proto_msgTypes[15]
+	mi := &file_milo_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1279,7 +1476,7 @@ func (x *GetConversationRequest) String() string {
 func (*GetConversationRequest) ProtoMessage() {}
 
 func (x *GetConversationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[15]
+	mi := &file_milo_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1292,7 +1489,7 @@ func (x *GetConversationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConversationRequest.ProtoReflect.Descriptor instead.
 func (*GetConversationRequest) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{15}
+	return file_milo_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetConversationRequest) GetId() string {
@@ -1312,7 +1509,7 @@ type GetConversationResponse struct {
 
 func (x *GetConversationResponse) Reset() {
 	*x = GetConversationResponse{}
-	mi := &file_milo_agent_proto_msgTypes[16]
+	mi := &file_milo_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1324,7 +1521,7 @@ func (x *GetConversationResponse) String() string {
 func (*GetConversationResponse) ProtoMessage() {}
 
 func (x *GetConversationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[16]
+	mi := &file_milo_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1337,7 +1534,7 @@ func (x *GetConversationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConversationResponse.ProtoReflect.Descriptor instead.
 func (*GetConversationResponse) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{16}
+	return file_milo_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetConversationResponse) GetConversation() *Conversation {
@@ -1363,7 +1560,7 @@ type DeleteConversationRequest struct {
 
 func (x *DeleteConversationRequest) Reset() {
 	*x = DeleteConversationRequest{}
-	mi := &file_milo_agent_proto_msgTypes[17]
+	mi := &file_milo_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1375,7 +1572,7 @@ func (x *DeleteConversationRequest) String() string {
 func (*DeleteConversationRequest) ProtoMessage() {}
 
 func (x *DeleteConversationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[17]
+	mi := &file_milo_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1388,7 +1585,7 @@ func (x *DeleteConversationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteConversationRequest.ProtoReflect.Descriptor instead.
 func (*DeleteConversationRequest) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{17}
+	return file_milo_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *DeleteConversationRequest) GetId() string {
@@ -1406,7 +1603,7 @@ type DeleteConversationResponse struct {
 
 func (x *DeleteConversationResponse) Reset() {
 	*x = DeleteConversationResponse{}
-	mi := &file_milo_agent_proto_msgTypes[18]
+	mi := &file_milo_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1418,7 +1615,7 @@ func (x *DeleteConversationResponse) String() string {
 func (*DeleteConversationResponse) ProtoMessage() {}
 
 func (x *DeleteConversationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[18]
+	mi := &file_milo_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1431,7 +1628,7 @@ func (x *DeleteConversationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteConversationResponse.ProtoReflect.Descriptor instead.
 func (*DeleteConversationResponse) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{18}
+	return file_milo_agent_proto_rawDescGZIP(), []int{20}
 }
 
 type SetCardStatusRequest struct {
@@ -1444,7 +1641,7 @@ type SetCardStatusRequest struct {
 
 func (x *SetCardStatusRequest) Reset() {
 	*x = SetCardStatusRequest{}
-	mi := &file_milo_agent_proto_msgTypes[19]
+	mi := &file_milo_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1456,7 +1653,7 @@ func (x *SetCardStatusRequest) String() string {
 func (*SetCardStatusRequest) ProtoMessage() {}
 
 func (x *SetCardStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[19]
+	mi := &file_milo_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1469,7 +1666,7 @@ func (x *SetCardStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCardStatusRequest.ProtoReflect.Descriptor instead.
 func (*SetCardStatusRequest) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{19}
+	return file_milo_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SetCardStatusRequest) GetCardId() string {
@@ -1494,7 +1691,7 @@ type SetCardStatusResponse struct {
 
 func (x *SetCardStatusResponse) Reset() {
 	*x = SetCardStatusResponse{}
-	mi := &file_milo_agent_proto_msgTypes[20]
+	mi := &file_milo_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1506,7 +1703,7 @@ func (x *SetCardStatusResponse) String() string {
 func (*SetCardStatusResponse) ProtoMessage() {}
 
 func (x *SetCardStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_milo_agent_proto_msgTypes[20]
+	mi := &file_milo_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1519,7 +1716,7 @@ func (x *SetCardStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCardStatusResponse.ProtoReflect.Descriptor instead.
 func (*SetCardStatusResponse) Descriptor() ([]byte, []int) {
-	return file_milo_agent_proto_rawDescGZIP(), []int{20}
+	return file_milo_agent_proto_rawDescGZIP(), []int{22}
 }
 
 var File_milo_agent_proto protoreflect.FileDescriptor
@@ -1557,7 +1754,7 @@ const file_milo_agent_proto_rawDesc = "" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\"C\n" +
 	"\tMiloError\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x1c\n" +
-	"\tretryable\x18\x02 \x01(\bR\tretryable\"\x88\x04\n" +
+	"\tretryable\x18\x02 \x01(\bR\tretryable\"\xaa\x04\n" +
 	"\x04Card\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\"\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x0e.milo.CardKindR\x04kind\x12\x14\n" +
@@ -1579,17 +1776,35 @@ const file_milo_agent_proto_rawDesc = "" +
 	"\vapply_label\x18\x0e \x01(\tR\n" +
 	"applyLabel\x12 \n" +
 	"\vdestructive\x18\x0f \x01(\bR\vdestructive\x12#\n" +
-	"\rapplied_title\x18\x10 \x01(\tR\fappliedTitle\"N\n" +
+	"\rapplied_title\x18\x10 \x01(\tR\fappliedTitle\x12 \n" +
+	"\x05stats\x18\x11 \x03(\v2\n" +
+	".milo.StatR\x05stats\"2\n" +
+	"\x04Stat\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\"\xc5\x01\n" +
 	"\bCardLine\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x16\n" +
 	"\x06before\x18\x02 \x01(\tR\x06before\x12\x14\n" +
-	"\x05after\x18\x03 \x01(\tR\x05after\"\x9f\x01\n" +
+	"\x05after\x18\x03 \x01(\tR\x05after\x12\x12\n" +
+	"\x04note\x18\x04 \x01(\tR\x04note\x12\x14\n" +
+	"\x05trend\x18\x05 \x01(\x05R\x05trend\x12\x14\n" +
+	"\x05spark\x18\x06 \x03(\x01R\x05spark\x12\x14\n" +
+	"\x05share\x18\a \x01(\x01R\x05share\x12\x1f\n" +
+	"\vexercise_id\x18\b \x01(\tR\n" +
+	"exerciseId\"\xde\x01\n" +
 	"\x05Chart\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x16\n" +
 	"\x06metric\x18\x02 \x01(\tR\x06metric\x12$\n" +
 	"\x04unit\x18\x03 \x01(\x0e2\x10.milo.WeightUnitR\x04unit\x12(\n" +
 	"\x06points\x18\x04 \x03(\v2\x10.milo.ChartPointR\x06points\x12\x18\n" +
-	"\acaption\x18\x05 \x01(\tR\acaption\"d\n" +
+	"\acaption\x18\x05 \x01(\tR\acaption\x12)\n" +
+	"\x06series\x18\x06 \x03(\v2\x11.milo.ChartSeriesR\x06series\x12\x12\n" +
+	"\x04bars\x18\a \x01(\bR\x04bars\"l\n" +
+	"\vChartSeries\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12(\n" +
+	"\x06points\x18\x02 \x03(\v2\x10.milo.ChartPointR\x06points\x12\x1f\n" +
+	"\vexercise_id\x18\x03 \x01(\tR\n" +
+	"exerciseId\"d\n" +
 	"\n" +
 	"ChartPoint\x12*\n" +
 	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x14\n" +
@@ -1626,7 +1841,7 @@ const file_milo_agent_proto_rawDesc = "" +
 	"\x14SetCardStatusRequest\x12\x17\n" +
 	"\acard_id\x18\x01 \x01(\tR\x06cardId\x12(\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x10.milo.CardStatusR\x06status\"\x17\n" +
-	"\x15SetCardStatusResponse*\xb5\x01\n" +
+	"\x15SetCardStatusResponse*\x81\x02\n" +
 	"\bCardKind\x12\x19\n" +
 	"\x15CARD_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16CARD_KIND_NEW_EXERCISE\x10\x01\x12\x12\n" +
@@ -1634,7 +1849,10 @@ const file_milo_agent_proto_rawDesc = "" +
 	"\x10CARD_KIND_CHANGE\x10\x03\x12\x1c\n" +
 	"\x18CARD_KIND_TEMPLATE_DRAFT\x10\x04\x12\x13\n" +
 	"\x0fCARD_KIND_CHART\x10\x05\x12\x15\n" +
-	"\x11CARD_KIND_WORKOUT\x10\x06*\x8e\x01\n" +
+	"\x11CARD_KIND_WORKOUT\x10\x06\x12\x16\n" +
+	"\x12CARD_KIND_PROGRESS\x10\a\x12\x17\n" +
+	"\x13CARD_KIND_BREAKDOWN\x10\b\x12\x19\n" +
+	"\x15CARD_KIND_SUGGESTIONS\x10\t*\x8e\x01\n" +
 	"\n" +
 	"CardStatus\x12\x1b\n" +
 	"\x17CARD_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -1664,7 +1882,7 @@ func file_milo_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_milo_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_milo_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_milo_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_milo_agent_proto_goTypes = []any{
 	(CardKind)(0),                      // 0: milo.CardKind
 	(CardStatus)(0),                    // 1: milo.CardStatus
@@ -1676,23 +1894,25 @@ var file_milo_agent_proto_goTypes = []any{
 	(*Done)(nil),                       // 7: milo.Done
 	(*MiloError)(nil),                  // 8: milo.MiloError
 	(*Card)(nil),                       // 9: milo.Card
-	(*CardLine)(nil),                   // 10: milo.CardLine
-	(*Chart)(nil),                      // 11: milo.Chart
-	(*ChartPoint)(nil),                 // 12: milo.ChartPoint
-	(*Conversation)(nil),               // 13: milo.Conversation
-	(*MiloItem)(nil),                   // 14: milo.MiloItem
-	(*ListConversationsRequest)(nil),   // 15: milo.ListConversationsRequest
-	(*ListConversationsResponse)(nil),  // 16: milo.ListConversationsResponse
-	(*GetConversationRequest)(nil),     // 17: milo.GetConversationRequest
-	(*GetConversationResponse)(nil),    // 18: milo.GetConversationResponse
-	(*DeleteConversationRequest)(nil),  // 19: milo.DeleteConversationRequest
-	(*DeleteConversationResponse)(nil), // 20: milo.DeleteConversationResponse
-	(*SetCardStatusRequest)(nil),       // 21: milo.SetCardStatusRequest
-	(*SetCardStatusResponse)(nil),      // 22: milo.SetCardStatusResponse
-	(*Change)(nil),                     // 23: milo.Change
-	(*RowVersion)(nil),                 // 24: milo.RowVersion
-	(WeightUnit)(0),                    // 25: milo.WeightUnit
-	(*timestamppb.Timestamp)(nil),      // 26: google.protobuf.Timestamp
+	(*Stat)(nil),                       // 10: milo.Stat
+	(*CardLine)(nil),                   // 11: milo.CardLine
+	(*Chart)(nil),                      // 12: milo.Chart
+	(*ChartSeries)(nil),                // 13: milo.ChartSeries
+	(*ChartPoint)(nil),                 // 14: milo.ChartPoint
+	(*Conversation)(nil),               // 15: milo.Conversation
+	(*MiloItem)(nil),                   // 16: milo.MiloItem
+	(*ListConversationsRequest)(nil),   // 17: milo.ListConversationsRequest
+	(*ListConversationsResponse)(nil),  // 18: milo.ListConversationsResponse
+	(*GetConversationRequest)(nil),     // 19: milo.GetConversationRequest
+	(*GetConversationResponse)(nil),    // 20: milo.GetConversationResponse
+	(*DeleteConversationRequest)(nil),  // 21: milo.DeleteConversationRequest
+	(*DeleteConversationResponse)(nil), // 22: milo.DeleteConversationResponse
+	(*SetCardStatusRequest)(nil),       // 23: milo.SetCardStatusRequest
+	(*SetCardStatusResponse)(nil),      // 24: milo.SetCardStatusResponse
+	(*Change)(nil),                     // 25: milo.Change
+	(*RowVersion)(nil),                 // 26: milo.RowVersion
+	(WeightUnit)(0),                    // 27: milo.WeightUnit
+	(*timestamppb.Timestamp)(nil),      // 28: google.protobuf.Timestamp
 }
 var file_milo_agent_proto_depIdxs = []int32{
 	2,  // 0: milo.SendRequest.context:type_name -> milo.MiloContext
@@ -1702,37 +1922,40 @@ var file_milo_agent_proto_depIdxs = []int32{
 	7,  // 4: milo.SendResponse.done:type_name -> milo.Done
 	8,  // 5: milo.SendResponse.error:type_name -> milo.MiloError
 	0,  // 6: milo.Card.kind:type_name -> milo.CardKind
-	10, // 7: milo.Card.lines:type_name -> milo.CardLine
-	23, // 8: milo.Card.changes:type_name -> milo.Change
-	24, // 9: milo.Card.base:type_name -> milo.RowVersion
-	11, // 10: milo.Card.chart:type_name -> milo.Chart
+	11, // 7: milo.Card.lines:type_name -> milo.CardLine
+	25, // 8: milo.Card.changes:type_name -> milo.Change
+	26, // 9: milo.Card.base:type_name -> milo.RowVersion
+	12, // 10: milo.Card.chart:type_name -> milo.Chart
 	1,  // 11: milo.Card.status:type_name -> milo.CardStatus
-	25, // 12: milo.Chart.unit:type_name -> milo.WeightUnit
-	12, // 13: milo.Chart.points:type_name -> milo.ChartPoint
-	26, // 14: milo.ChartPoint.at:type_name -> google.protobuf.Timestamp
-	26, // 15: milo.Conversation.updated_at:type_name -> google.protobuf.Timestamp
-	6,  // 16: milo.MiloItem.reading:type_name -> milo.Reading
-	9,  // 17: milo.MiloItem.card:type_name -> milo.Card
-	26, // 18: milo.MiloItem.created_at:type_name -> google.protobuf.Timestamp
-	13, // 19: milo.ListConversationsResponse.conversations:type_name -> milo.Conversation
-	13, // 20: milo.GetConversationResponse.conversation:type_name -> milo.Conversation
-	14, // 21: milo.GetConversationResponse.items:type_name -> milo.MiloItem
-	1,  // 22: milo.SetCardStatusRequest.status:type_name -> milo.CardStatus
-	3,  // 23: milo.MiloService.Send:input_type -> milo.SendRequest
-	15, // 24: milo.MiloService.ListConversations:input_type -> milo.ListConversationsRequest
-	17, // 25: milo.MiloService.GetConversation:input_type -> milo.GetConversationRequest
-	19, // 26: milo.MiloService.DeleteConversation:input_type -> milo.DeleteConversationRequest
-	21, // 27: milo.MiloService.SetCardStatus:input_type -> milo.SetCardStatusRequest
-	4,  // 28: milo.MiloService.Send:output_type -> milo.SendResponse
-	16, // 29: milo.MiloService.ListConversations:output_type -> milo.ListConversationsResponse
-	18, // 30: milo.MiloService.GetConversation:output_type -> milo.GetConversationResponse
-	20, // 31: milo.MiloService.DeleteConversation:output_type -> milo.DeleteConversationResponse
-	22, // 32: milo.MiloService.SetCardStatus:output_type -> milo.SetCardStatusResponse
-	28, // [28:33] is the sub-list for method output_type
-	23, // [23:28] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	10, // 12: milo.Card.stats:type_name -> milo.Stat
+	27, // 13: milo.Chart.unit:type_name -> milo.WeightUnit
+	14, // 14: milo.Chart.points:type_name -> milo.ChartPoint
+	13, // 15: milo.Chart.series:type_name -> milo.ChartSeries
+	14, // 16: milo.ChartSeries.points:type_name -> milo.ChartPoint
+	28, // 17: milo.ChartPoint.at:type_name -> google.protobuf.Timestamp
+	28, // 18: milo.Conversation.updated_at:type_name -> google.protobuf.Timestamp
+	6,  // 19: milo.MiloItem.reading:type_name -> milo.Reading
+	9,  // 20: milo.MiloItem.card:type_name -> milo.Card
+	28, // 21: milo.MiloItem.created_at:type_name -> google.protobuf.Timestamp
+	15, // 22: milo.ListConversationsResponse.conversations:type_name -> milo.Conversation
+	15, // 23: milo.GetConversationResponse.conversation:type_name -> milo.Conversation
+	16, // 24: milo.GetConversationResponse.items:type_name -> milo.MiloItem
+	1,  // 25: milo.SetCardStatusRequest.status:type_name -> milo.CardStatus
+	3,  // 26: milo.MiloService.Send:input_type -> milo.SendRequest
+	17, // 27: milo.MiloService.ListConversations:input_type -> milo.ListConversationsRequest
+	19, // 28: milo.MiloService.GetConversation:input_type -> milo.GetConversationRequest
+	21, // 29: milo.MiloService.DeleteConversation:input_type -> milo.DeleteConversationRequest
+	23, // 30: milo.MiloService.SetCardStatus:input_type -> milo.SetCardStatusRequest
+	4,  // 31: milo.MiloService.Send:output_type -> milo.SendResponse
+	18, // 32: milo.MiloService.ListConversations:output_type -> milo.ListConversationsResponse
+	20, // 33: milo.MiloService.GetConversation:output_type -> milo.GetConversationResponse
+	22, // 34: milo.MiloService.DeleteConversation:output_type -> milo.DeleteConversationResponse
+	24, // 35: milo.MiloService.SetCardStatus:output_type -> milo.SetCardStatusResponse
+	31, // [31:36] is the sub-list for method output_type
+	26, // [26:31] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_milo_agent_proto_init() }
@@ -1748,7 +1971,7 @@ func file_milo_agent_proto_init() {
 		(*SendResponse_Done)(nil),
 		(*SendResponse_Error)(nil),
 	}
-	file_milo_agent_proto_msgTypes[12].OneofWrappers = []any{
+	file_milo_agent_proto_msgTypes[14].OneofWrappers = []any{
 		(*MiloItem_UserText)(nil),
 		(*MiloItem_AssistantText)(nil),
 		(*MiloItem_Reading)(nil),
@@ -1760,7 +1983,7 @@ func file_milo_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_milo_agent_proto_rawDesc), len(file_milo_agent_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   21,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -16,6 +16,15 @@ import (
 type tool struct {
 	param anthropic.ToolUnionParam
 	run   func(t *turn, ctx context.Context, input []byte) (any, error)
+	// reads marks a tool that only looks things up, so several can run at once.
+	reads bool
+}
+
+// readTool is a tool that only reads.
+func readTool[In any](name, description string, fn func(t *turn, ctx context.Context, in In) (any, error)) tool {
+	tl := newTool(name, description, fn)
+	tl.reads = true
+	return tl
 }
 
 func newTool[In any](name, description string, fn func(t *turn, ctx context.Context, in In) (any, error)) tool {
@@ -56,20 +65,23 @@ func schemaOf[In any]() anthropic.ToolInputSchemaParam {
 // The order is part of the cached prompt; keep it stable.
 var tools = []tool{
 	// Reading.
-	newTool("search_exercises",
+	readTool("search_exercises",
 		"Find exercises in the user's library (their own and the built-in ones) by name, alias or a short description. Returns ids, how each is measured and when it was last done.",
 		(*turn).searchExercises),
-	newTool("get_workouts",
-		"Read workouts with their exercises and sets, including the ids that edits need. Pass workout_ids, or a date, or a date range (dates are YYYY-MM-DD in the user's time zone). With none, returns the most recent ones.",
+	readTool("get_workouts",
+		"Read workouts with their exercises and sets, an estimate of the calories burned, and the ids that edits need. Pass workout_ids, or a date, or a date range (dates are YYYY-MM-DD in the user's time zone). With none, returns the most recent ones.",
 		(*turn).getWorkouts),
-	newTool("exercise_history",
+	readTool("list_workouts",
+		"One line per finished workout over any stretch, newest first: name, date, minutes, sets, volume, calories and main muscles. The one read for finding or ranking workouts: the best leg day, the longest session, every push day, the last time something was done. Follow with get_workouts only for the sets of the one or two that matter.",
+		(*turn).listWorkouts),
+	readTool("exercise_history",
 		"Read one exercise's sessions, newest first, with each session's sets, top set, volume and estimated 1RM, plus the new bests over time.",
 		(*turn).exerciseHistory),
-	newTool("training_summary",
-		"Add up a stretch of training in one read: workouts and sets per week, volume, sets per muscle, and the exercises done most. Use it for questions about consistency, balance or a whole month, instead of reading workouts one by one.",
+	readTool("training_summary",
+		"Add up a stretch of training in one read: workouts, sets and volume per week (per month over long stretches), workouts by weekday, the longest and current run of weeks trained, sets per muscle with when each was last trained, and the exercises done most. For any length of time, a week or every year in the log; never read workouts one by one to count them.",
 		(*turn).trainingSummary),
-	newTool("list_templates", "Read the user's templates and the exercises in each.", (*turn).listTemplates),
-	newTool("get_profile",
+	readTool("list_templates", "Read the user's templates and the exercises in each.", (*turn).listTemplates),
+	readTool("get_profile",
 		"Read the user's settings (display unit, default rest, height, birth date, sex) and their recent body weight and body fat readings.",
 		(*turn).getProfile),
 
@@ -108,13 +120,22 @@ var tools = []tool{
 		"Propose a change to one of the user's own exercises: its name, equipment, muscles, how it is counted, confirming an Approximate one, or merging it into another exercise it turned out to be.",
 		(*turn).proposeExerciseChange),
 	newTool("propose_delete",
-		"Propose deleting a workout (or discarding the running one), a template, one of the user's own exercises, or a body reading. Shown as a card with a red button.",
+		"Propose deleting a workout (or discarding the running one), a template, one of the user's own exercises, or a body reading. Several workouts go on one card: pass ids. Shown as a card with a red button.",
 		(*turn).proposeDelete),
 
-	// Showing.
+	// Showing. Each result carries the numbers that were drawn, so there is no need to read them first.
+	newTool("show_progress",
+		"Show every lift side by side on one card, each with a small chart: ranked by how far its top set moved over the dates, or (rank records) its best set and when. The one call for questions across lifts: overall progress, what improved or stalled, personal bests.",
+		(*turn).showProgress),
 	newTool("show_chart",
-		"Show a chart over time: one exercise's top_set (heaviest set), volume or e1rm (estimated one-rep max), or the user's body_weight.",
+		"Show a line chart over time: one exercise's top_set (heaviest set), volume or e1rm (estimated one-rep max), up to three exercises compared, or the user's body_weight.",
 		(*turn).showChart),
+	newTool("show_training",
+		"Show how much the user trained as bars, one per week or month (workouts, sets, volume or minutes), under the totals: workouts, the average a week and the average length. For consistency, frequency and comparing weeks or months.",
+		(*turn).showTraining),
+	newTool("show_muscles",
+		"Show the working sets each muscle got over a stretch as bars, with the muscles trained before that got none. For balance and what is being neglected.",
+		(*turn).showMuscles),
 	newTool("show_workout", "Show one workout as a card the user can open.", (*turn).showWorkout),
 }
 

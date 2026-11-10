@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,7 +35,14 @@ type turn struct {
 	proposed map[uuid.UUID]query.Exercise // new exercises, usable before the user adds them
 }
 
-func newTurn(s *Service, userID, convID uuid.UUID, mctx *milo.MiloContext, loc *time.Location, displayUnit string, emit func(*milo.SendResponse) error) *turn {
+func newTurn(s *Service, userID, convID uuid.UUID, mctx *milo.MiloContext, loc *time.Location, displayUnit string, send func(*milo.SendResponse) error) *turn {
+	// Reads run side by side and each reports what it read, so the stream takes one at a time.
+	var sending sync.Mutex
+	emit := func(r *milo.SendResponse) error {
+		sending.Lock()
+		defer sending.Unlock()
+		return send(r)
+	}
 	return &turn{
 		s: s, userID: userID, convID: convID, mctx: mctx, loc: loc, now: s.now(), displayUnit: displayUnit, emit: emit,
 		workouts: map[uuid.UUID]workout{}, slots: map[uuid.UUID][]*slot{}, proposed: map[uuid.UUID]query.Exercise{},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,12 +15,30 @@ import (
 )
 
 type deleteInput struct {
-	What string `json:"what" jsonschema:"enum=workout,enum=template,enum=exercise,enum=body_reading"`
-	ID   string `json:"id" jsonschema_description:"The workout_id, template_id, exercise_id or reading_id."`
+	What string   `json:"what" jsonschema:"enum=workout,enum=template,enum=exercise,enum=body_reading"`
+	ID   string   `json:"id,omitempty" jsonschema_description:"The workout_id, template_id, exercise_id or reading_id."`
+	IDs  []string `json:"ids,omitempty" jsonschema_description:"Several workout_ids, to delete them with one card."`
 }
 
 // proposeDelete shows what would go and a red button. Deleting always takes a tap.
 func (t *turn) proposeDelete(ctx context.Context, in deleteInput) (any, error) {
+	if len(in.IDs) == 1 {
+		in.ID, in.IDs = in.IDs[0], nil
+	}
+	if len(in.IDs) > 1 {
+		if in.What != "workout" {
+			return nil, badInput("ids is for workouts; delete a %s one at a time with id", in.What)
+		}
+		card, err := t.deleteWorkouts(ctx, in.IDs)
+		if err != nil {
+			return nil, err
+		}
+		cardID, err := t.emitCard(ctx, card)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"card_id": cardID, "workouts": len(in.IDs), "shown": proposedNote}, nil
+	}
 	id, err := parseUUID(in.ID, "id")
 	if err != nil {
 		return nil, err
@@ -87,6 +106,40 @@ func (t *turn) deleteWorkout(ctx context.Context, id uuid.UUID) (*milo.Card, err
 	}
 	return card, nil
 }
+
+// deleteWorkouts is one card that deletes several workouts, each a line on it.
+func (t *turn) deleteWorkouts(ctx context.Context, ids []string) (*milo.Card, error) {
+	n := count(len(ids), "workout", "workouts")
+	all := &milo.Card{Kind: milo.CardKind_CARD_KIND_CHANGE, Destructive: true, Title: "Delete " + n, ApplyLabel: "Delete " + n, AppliedTitle: "Deleted " + n}
+	sets := 0
+	for i, raw := range ids {
+		id, err := parseUUID(raw, "ids")
+		if err != nil {
+			return nil, err
+		}
+		one, err := t.deleteWorkout(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		all.Changes, all.Base = append(all.Changes, one.Changes...), append(all.Base, one.Base...)
+		for _, c := range one.Changes {
+			if c.GetSet() != nil {
+				sets++
+			}
+		}
+		switch {
+		case i < bulkLines:
+			all.Lines = append(all.Lines, &milo.CardLine{Label: one.Title, After: strings.SplitN(one.Subtitle, ",", 2)[0]})
+		case i == bulkLines:
+			all.Lines = append(all.Lines, &milo.CardLine{Label: fmt.Sprintf("and %d more", len(ids)-bulkLines)})
+		}
+	}
+	all.Subtitle = count(sets, "set", "sets") + " in all"
+	return all, nil
+}
+
+// bulkLines is how many workouts a bulk delete card names before it says "and N more".
+const bulkLines = 8
 
 func (t *turn) deleteTemplate(ctx context.Context, id string) (*milo.Card, error) {
 	tpl, err := t.userTemplate(ctx, id)

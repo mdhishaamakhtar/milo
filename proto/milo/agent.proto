@@ -80,6 +80,12 @@ enum CardKind {
   CARD_KIND_CHART = 5;
   // A summary of one workout. Open.
   CARD_KIND_WORKOUT = 6;
+  // Lifts side by side, each with where it started and where it is now. A row opens its exercise.
+  CARD_KIND_PROGRESS = 7;
+  // Parts of a whole as bars, e.g. sets by muscle.
+  CARD_KIND_BREAKDOWN = 8;
+  // Things the user might say next, as buttons under Milo's answer. `lines` holds them.
+  CARD_KIND_SUGGESTIONS = 9;
 }
 
 enum CardStatus {
@@ -115,21 +121,49 @@ message Card {
   bool destructive = 15;
   // What the card says once applied: "Deleted Push Day".
   string applied_title = 16;
+  // Headline numbers above a chart: "37" over "workouts".
+  repeated Stat stats = 17;
+}
+
+message Stat {
+  string value = 1;
+  string label = 2;
 }
 
 message CardLine {
   string label = 1;
   string before = 2;
   string after = 3;
+  // A short tag at the end of the row: "+15 kg", "7 Oct".
+  string note = 4;
+  // Which way the row is going, to colour the tag: 1 up, -1 down, 0 neither.
+  int32 trend = 5;
+  // The row's values over time, oldest first, drawn as a small line.
+  repeated double spark = 6;
+  // The row's size against the largest row, 0 to 1, drawn as a bar.
+  double share = 7;
+  // The exercise the row is about, so tapping it opens that exercise.
+  string exercise_id = 8;
 }
 
 message Chart {
   string title = 1;
-  // "top_set", "volume", "e1rm" or "body_weight".
+  // "top_set", "volume", "e1rm" or "body_weight"; for bars, "workouts", "sets", "volume" or "minutes".
   string metric = 2;
   WeightUnit unit = 3;
+  // One line, or the bars.
   repeated ChartPoint points = 4;
   string caption = 5;
+  // Two or more lines on the same axes, for comparing lifts. `points` is empty then.
+  repeated ChartSeries series = 6;
+  // Bars, one per week or month, instead of a line.
+  bool bars = 7;
+}
+
+message ChartSeries {
+  string name = 1;
+  repeated ChartPoint points = 2;
+  string exercise_id = 3;
 }
 
 message ChartPoint {

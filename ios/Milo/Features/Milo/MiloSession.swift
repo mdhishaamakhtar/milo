@@ -46,8 +46,12 @@ final class MiloSession {
     /// Waiting on Milo with nothing streaming in yet: it is reading, or deciding what to do.
     var isWorking: Bool {
         guard busy else { return false }
-        if case .reply = items.last { return false }
-        return true
+        switch items.last {
+        case .reply: return false
+        // What to say next comes after the answer: Milo is done.
+        case .card(let card) where card.kind == .suggestions: return false
+        default: return true
+        }
     }
 
     /// Milo has read from the log since the last message: the wait is it going through it.

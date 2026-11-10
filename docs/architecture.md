@@ -83,7 +83,7 @@ Milo's tools come in four kinds, and the name says which:
 | Read | `get_workouts`, `exercise_history`, `training_summary` | Nothing changes |
 | Do | `start_workout`, `log_sets`, `finish_workout` | The card applies on arrival and shows a line with Undo |
 | Propose | `propose_change`, `propose_template`, `propose_delete` | The card waits for a tap |
-| Show | `show_chart`, `show_workout` | A card to look at |
+| Show | `show_progress`, `show_chart`, `show_training`, `show_muscles` | A card to look at; its result hands Milo the numbers it drew |
 
 The rule for which is which: adding what the person just told you is done
 straight away; anything that rewrites or removes what's already logged waits for
@@ -103,8 +103,17 @@ A few details worth knowing before changing the agent:
 - **History is append-only.** A turn's messages are saved only when it finishes
   cleanly, so a dropped connection never leaves half an exchange behind.
   (`loop.go`, `store.go`)
+- **Reads run side by side.** Tool calls in one reply that only read run at
+  once; anything that changes the turn runs in order. (`loop.go`)
+- **Suggested replies ride on the answer.** An answer may end with a line
+  starting `>>` that lists what the user might say next. The server holds that
+  line back from the text and sends it as a card of buttons. It is text, not a
+  tool, because the newer models treat words written before a tool call as
+  progress notes, so an answer followed by a tool call would be lost. (`loop.go`)
 - **The model is behind an interface.** Tests script a fake model's tool calls
-  and check the cards; `make live` runs the same checks against the real one.
+  and check the cards; `make live` runs the same checks against the real one, and
+  `make battery AS=username` asks about 60 real questions over a history in the
+  local database and writes what Milo did with each.
 
 ## 4. The maths is written twice and tested once
 

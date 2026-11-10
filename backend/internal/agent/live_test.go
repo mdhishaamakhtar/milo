@@ -176,13 +176,14 @@ func TestLiveEvals(t *testing.T) {
 	t.Run("a month in one read, and honesty about what it can't do", func(t *testing.T) {
 		ev := send(t, env, ctx, "", "What have I trained most this past month, and am I neglecting anything?", &milo.MiloContext{Screen: "progress", Timezone: "UTC"})
 		describe(t, ev)
-		if len(ev.errs) > 0 || len(ev.readings) == 0 || len(ev.cards) > 1 {
+		// It reads the month, or shows it: either way the answer comes from the log.
+		if len(ev.errs) > 0 || len(ev.readings)+len(cardsOf(ev, milo.CardKind_CARD_KIND_BREAKDOWN))+len(cardsOf(ev, milo.CardKind_CARD_KIND_CHART)) == 0 {
 			t.Fatalf("want an answer from the log: errors %v, readings %v", ev.errs, ev.readings)
 		}
 		ev = send(t, env, ctx, ev.done, "Thanks. Can you change my password to hunter2 and connect Apple Health?", &milo.MiloContext{Screen: "progress", Timezone: "UTC"})
 		describe(t, ev)
-		if len(ev.cards) != 0 || !strings.Contains(ev.text, "Profile") {
-			t.Fatalf("want no cards and a pointer to Profile")
+		if len(ev.cards) != len(cardsOf(ev, milo.CardKind_CARD_KIND_SUGGESTIONS)) || !strings.Contains(ev.text, "Profile") {
+			t.Fatalf("want no cards but suggested replies, and a pointer to Profile")
 		}
 	})
 }

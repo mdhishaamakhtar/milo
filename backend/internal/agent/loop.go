@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go/v2"
@@ -37,13 +39,15 @@ func (e turnError) Error() string {
 
 func (s *Service) params(msgs []anthropic.MessageParam) anthropic.MessageNewParams {
 	return anthropic.MessageNewParams{
-		Model:        anthropic.Model(s.modelName),
-		MaxTokens:    maxTokens,
-		System:       []anthropic.TextBlockParam{{Text: systemPrompt}},
+		Model:     anthropic.Model(s.modelName),
+		MaxTokens: maxTokens,
+		// The tools and the system prompt are the same for everyone, so they are cached
+		// on their own: a new conversation reads them instead of paying to write them again.
+		System:       []anthropic.TextBlockParam{{Text: systemPrompt, CacheControl: anthropic.NewCacheControlEphemeralParam()}},
 		Tools:        toolParams,
 		Messages:     msgs,
 		OutputConfig: anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortMedium},
-		// Caches tools, system prompt and the conversation so far.
+		// Caches the conversation so far.
 		CacheControl: anthropic.NewCacheControlEphemeralParam(),
 	}
 }
@@ -92,10 +96,12 @@ func (s *Service) run(ctx context.Context, t *turn, text string, first bool) err
 
 	for range maxModelCalls {
 		var said strings.Builder
-		msg, err := s.model.Stream(ctx, s.params(append(history, pending...)), func(d string) {
+		words := reply{say: func(d string) {
 			said.WriteString(d)
 			_ = t.emit(&milo.SendResponse{Event: &milo.SendResponse_TextDelta{TextDelta: &milo.TextDelta{Text: d}}})
-		})
+		}}
+		msg, err := s.model.Stream(ctx, s.params(append(history, pending...)), words.write)
+		suggestions := words.finish()
 		if err != nil {
 			if errors.Is(ctx.Err(), context.Canceled) {
 				return turnError{msg: "Stopped.", retryable: true, cause: err}
@@ -116,18 +122,96 @@ func (s *Service) run(ctx context.Context, t *turn, text string, first bool) err
 		pending = append(pending, msg.ToParam())
 
 		if msg.StopReason != anthropic.StopReasonToolUse {
+			if len(suggestions) > 0 {
+				if _, err := t.emitCard(ctx, &milo.Card{Kind: milo.CardKind_CARD_KIND_SUGGESTIONS, Lines: suggestions}); err != nil {
+					return err
+				}
+			}
 			// Until a card is applied, the chat list shows how Milo's first answer began.
 			_ = s.q.SetConversationSummaryIfEmpty(ctx, query.SetConversationSummaryIfEmptyParams{ID: t.convID, Summary: truncate(said.String(), summaryLength)})
 			return s.persistMessages(ctx, t.convID, t.userID, pending)
 		}
-		var results []anthropic.ContentBlockParamUnion
+		var uses []anthropic.ToolUseBlock
 		for _, block := range msg.Content {
 			if use, ok := block.AsAny().(anthropic.ToolUseBlock); ok {
-				out, isErr := t.runTool(ctx, use.Name, []byte(use.JSON.Input.Raw()))
-				results = append(results, anthropic.NewToolResultBlock(use.ID, out, isErr))
+				uses = append(uses, use)
 			}
 		}
-		pending = append(pending, anthropic.NewUserMessage(results...))
+		pending = append(pending, anthropic.NewUserMessage(t.runTools(ctx, uses)...))
 	}
 	return turnError{msg: "That took Milo too many steps. Try a narrower question.", retryable: true}
+}
+
+// suggestMark starts the last line of an answer when it offers what to say
+// next: ">> Chart my leg press | Start a pull day". The line is Milo's to
+// write and the app's to draw as buttons, so it never reaches the user as text.
+const suggestMark = ">>"
+
+// reply passes Milo's words on as they arrive, holding back the suggestions line.
+type reply struct {
+	say  func(string)
+	held string // not passed on yet: line breaks that may end the answer, and the suggestions line
+}
+
+func (r *reply) write(delta string) {
+	r.held += delta
+	if strings.HasPrefix(strings.TrimLeft(r.held, "\n"), suggestMark) {
+		return // the suggestions line has begun; the rest of the reply is it
+	}
+	// What follows the answer waits until it is known not to be that line: the line
+	// itself, a ">" that may become its mark, and the line breaks before either.
+	settled := r.held
+	if cut := strings.Index(settled, "\n"+suggestMark); cut >= 0 {
+		settled = settled[:cut]
+	} else if last := settled[strings.LastIndex(settled, "\n")+1:]; strings.HasPrefix(suggestMark, last) {
+		settled = settled[:len(settled)-len(last)]
+	}
+	settled = strings.TrimRight(settled, "\n")
+	if settled != "" {
+		r.say(settled)
+		r.held = r.held[len(settled):]
+	}
+}
+
+// finish ends the reply: it returns the suggestions if the reply closed with
+// them, and passes on anything else still held.
+func (r *reply) finish() []*milo.CardLine {
+	rest := strings.TrimSpace(r.held)
+	r.held = ""
+	line, ok := strings.CutPrefix(rest, suggestMark)
+	if !ok {
+		if rest != "" {
+			r.say(rest)
+		}
+		return nil
+	}
+	var out []*milo.CardLine
+	for _, s := range strings.Split(strings.SplitN(line, "\n", 2)[0], "|") {
+		if s = strings.TrimSpace(s); s != "" && len(out) < 3 {
+			out = append(out, &milo.CardLine{Label: truncate(s, 40)})
+		}
+	}
+	return out
+}
+
+// runTools runs one reply's tool calls and returns their results in order.
+// Calls that only read run at once; anything that changes the turn runs in turn.
+func (t *turn) runTools(ctx context.Context, uses []anthropic.ToolUseBlock) []anthropic.ContentBlockParamUnion {
+	results := make([]anthropic.ContentBlockParamUnion, len(uses))
+	run := func(i int) {
+		out, isErr := t.runTool(ctx, uses[i].Name, []byte(uses[i].JSON.Input.Raw()))
+		results[i] = anthropic.NewToolResultBlock(uses[i].ID, out, isErr)
+	}
+	if slices.ContainsFunc(uses, func(u anthropic.ToolUseBlock) bool { return !toolsByName[u.Name].reads }) {
+		for i := range uses {
+			run(i)
+		}
+		return results
+	}
+	var wg sync.WaitGroup
+	for i := range uses {
+		wg.Go(func() { run(i) })
+	}
+	wg.Wait()
+	return results
 }

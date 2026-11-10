@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mdhishaamakhtar/milo/backend/gen/milo"
+	"github.com/mdhishaamakhtar/milo/backend/internal/db/query"
 	"github.com/mdhishaamakhtar/milo/backend/internal/rows"
 )
 
@@ -69,7 +70,36 @@ func (t *turn) logSets(ctx context.Context, in logSetsInput) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"card_id": id, "workout_id": w.id.String(), "logged": len(in.Sets), "shown": doneNote}, nil
+	out := map[string]any{"card_id": id, "workout_id": w.id.String(), "logged": len(in.Sets), "shown": doneNote}
+	if best := t.newBest(ctx, ex, in.Sets); best != "" {
+		out["new_best"] = best
+	}
+	return out, nil
+}
+
+// newBest says whether the sets just logged beat everything logged before on
+// this exercise, so Milo can tell the user: "Heaviest set yet: 62.5 kg × 8 (before: 60 kg × 8 on Tue 10 Nov)".
+func (t *turn) newBest(ctx context.Context, ex query.Exercise, sets []setInput) string {
+	_, sessions, err := t.sessions(ctx, ex.ID, 60)
+	if err != nil {
+		return ""
+	}
+	body := t.bodyKg(ctx)
+	var before mark
+	for _, s := range sessions {
+		if m, ok := topMark(exerciseDetail{row: query.WorkoutExercisesForRow{Measurement: ex.Measurement}, sets: s.sets}, s.at, body); ok && m.kg > before.kg {
+			before = m
+		}
+	}
+	logged := make([]query.Set, len(sets))
+	for i, in := range sets {
+		logged[i] = query.Set{Weight: in.Weight, WeightUnit: in.Unit, Reps: in.Reps, PerSide: in.PerSide, Kind: in.Kind, Done: true}
+	}
+	now, ok := topMark(exerciseDetail{row: query.WorkoutExercisesForRow{Measurement: ex.Measurement}, sets: logged}, t.now, body)
+	if !ok || before.kg == 0 || now.kg <= before.kg+1e-9 {
+		return ""
+	}
+	return fmt.Sprintf("Heaviest set yet on %s: %s (before: %s on %s). Worth a word.", ex.Name, now.text, before.text, t.day(before.at))
 }
 
 // doneNote is what Milo is told after something was applied without a tap.

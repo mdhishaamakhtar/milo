@@ -1,5 +1,5 @@
 # Milo monorepo tasks. Run from the repo root.
-.PHONY: up down gen lint test run live ios ios-test phone
+.PHONY: up down gen lint test run live battery ios ios-test phone
 
 # The simulator the app tests run on.
 SIM ?= iPhone 18 Pro
@@ -27,6 +27,9 @@ run:   ## Run the API on :8080 with the repo-root .env
 
 live:  ## Milo against the real Claude API (needs a key in .env; costs about a cent)
 	cd backend && MILO_LIVE=1 go test ./internal/agent/ -run TestLiveEvals -v
+
+battery:  ## Ask Milo about 60 real questions over a user's history in the local database: make battery AS=username (about 15 cents on Haiku)
+	cd backend && MILO_BATTERY=1 MILO_BATTERY_USER=$(AS) go test ./internal/agent -run TestBattery -count=1 -v
 
 ios:   ## Generate the Xcode project and open it
 	cd ios && xcodegen && open Milo.xcodeproj

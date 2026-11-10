@@ -139,6 +139,19 @@ struct CardView: View {
                     .frame(minHeight: 40)
                 }
             }
+        case .progress:
+            VStack(spacing: 0) {
+                ForEach(Array(card.lines.enumerated()), id: \.offset) { _, line in
+                    Divider().overlay(Color.line)
+                    Button { if let id = UUID(protoID: line.exerciseID) { openExercise?(id) } } label: { progressLine(line) }
+                        .buttonStyle(.row)
+                }
+            }
+        case .breakdown:
+            VStack(spacing: 11) {
+                ForEach(Array(card.lines.enumerated()), id: \.offset) { _, line in shareLine(line) }
+            }
+            .padding(.top, 2)
         default: // change
             VStack(spacing: 0) {
                 ForEach(Array(card.lines.enumerated()), id: \.offset) { _, line in
@@ -147,6 +160,47 @@ struct CardView: View {
                 }
             }
         }
+    }
+
+    /// One lift: where it started and where it got to, its sessions as a small line, and how far it moved.
+    private func progressLine(_ line: Milo_CardLine) -> some View {
+        // Orange is a lift that went up; a dip is stated plainly, not in red.
+        let tint = line.trend > 0 ? Color.or : line.trend < 0 ? Color.tx2 : Color.tx3
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(line.label).font(.sofia(15.5, .semibold)).lineLimit(1)
+                Text(line.before.isEmpty ? line.after : "\(line.before) → \(line.after)")
+                    .font(.sofia(13.5, .regular)).foregroundStyle(Color.tx2).lineLimit(1).minimumScaleFactor(0.85)
+            }
+            Spacer(minLength: 6)
+            if line.spark.count > 1 {
+                Sparkline(points: line.spark, color: line.trend > 0 ? .or : .tx3).frame(width: 46, height: 22)
+            }
+            Text(line.note).font(.sofia(13.5, .semibold)).foregroundStyle(tint).monospacedDigit()
+                .frame(minWidth: 54, alignment: .trailing)
+        }
+        .frame(minHeight: 58)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// One part of a whole: its name, a bar for its size against the largest, and the count.
+    private func shareLine(_ line: Milo_CardLine) -> some View {
+        HStack(spacing: 12) {
+            Text(line.label).font(.sofia(14.5, .medium)).lineLimit(1).frame(width: 108, alignment: .leading)
+                .foregroundStyle(line.share > 0 ? Color.tx : Color.tx2)
+            Capsule().fill(Color.s2).frame(height: 8)
+                .overlay(alignment: .leading) {
+                    GeometryReader { geo in
+                        Capsule().fill(Color.tx2).frame(width: line.share > 0 ? max(8, geo.size.width * line.share) : 0)
+                    }
+                }
+            Text(line.note.isEmpty ? line.after : line.note)
+                .font(.sofia(13.5, .regular)).foregroundStyle(line.share > 0 ? Color.tx2 : Color.tx3).monospacedDigit().lineLimit(1)
+                .frame(width: 92, alignment: .trailing)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(line.label), \(line.after)\(line.note.isEmpty ? "" : ", \(line.note)")")
     }
 
     private func changeLine(_ line: Milo_CardLine) -> some View {
@@ -167,36 +221,110 @@ struct CardView: View {
     }
 
     @ViewBuilder private var chart: some View {
-        let points = card.chart.points
-        let (big, small) = headline(card.subtitle)
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(big).font(.sofia(26, .bold))
-            Text(small).font(.sofia(14.5, .regular)).foregroundStyle(Color.tx2)
+        if !card.stats.isEmpty {
+            HStack(alignment: .top, spacing: 0) {
+                ForEach(Array(card.stats.enumerated()), id: \.offset) { _, stat in
+                    VStack(alignment: .leading, spacing: Space.rowText) {
+                        Text(stat.value).font(.sofia(22, .bold)).monospacedDigit()
+                        Text(stat.label).font(.sofia(13, .regular)).foregroundStyle(Color.tx2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.top, 4)
+        } else if !card.subtitle.isEmpty {
+            let (big, small) = headline(card.subtitle)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(big).font(.sofia(26, .bold))
+                Text(small).font(.sofia(14.5, .regular)).foregroundStyle(Color.tx2)
+            }
         }
-        // Body weight is blue, as on the Body screen; lifts are orange.
-        let tint = card.chart.metric == "body_weight" ? Color.bl : Color.or
-        Chart(Array(points.enumerated()), id: \.offset) { i, p in
-            LineMark(x: .value("Date", p.at.date), y: .value("Value", p.value))
-                .foregroundStyle(tint)
-                .lineStyle(StrokeStyle(lineWidth: 2))
-            PointMark(x: .value("Date", p.at.date), y: .value("Value", p.value))
-                .foregroundStyle(i == points.count - 1 ? tint : Color.bg)
-                .symbolSize(i == points.count - 1 ? 60 : 24)
-        }
-        .chartYScale(domain: .automatic(includesZero: false))
-        .chartYAxis {
-            AxisMarks(values: .automatic(desiredCount: 3)) { _ in AxisGridLine().foregroundStyle(Color.line) }
+        Group {
+            if card.chart.bars { bars } else { linesChart }
         }
         .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 3)) { value in
-                AxisValueLabel(format: .dateTime.month(.abbreviated).year()).foregroundStyle(Color.tx3)
+            AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                AxisValueLabel(format: sameYear ? .dateTime.month(.abbreviated) : .dateTime.month(.abbreviated).year()).foregroundStyle(Color.tx3)
             }
         }
         .frame(height: 140)
         .padding(.top, 10)
+        if card.chart.series.count > 1 {
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(card.chart.series.enumerated()), id: \.offset) { i, line in
+                    HStack(spacing: 7) {
+                        Circle().fill(Self.lineColors[i % Self.lineColors.count]).frame(width: 8, height: 8)
+                        Text(line.name).font(.sofia(13.5, .medium)).lineLimit(1)
+                        Spacer(minLength: 6)
+                        Text(line.points.last?.label ?? "").font(.sofia(13.5, .regular)).foregroundStyle(Color.tx2).monospacedDigit()
+                    }
+                }
+            }
+            .padding(.top, 10)
+        }
         if !card.chart.caption.isEmpty {
             Text(card.chart.caption).font(.sub).foregroundStyle(Color.tx2).padding(.top, 8)
         }
+    }
+
+    /// Everything charted falls in this year, so the months don't need a year beside them.
+    private var sameYear: Bool {
+        let year = Calendar.current.component(.year, from: .now)
+        let dates = (card.chart.points + card.chart.series.flatMap(\.points)).map(\.at.date)
+        return dates.allSatisfy { Calendar.current.component(.year, from: $0) == year }
+    }
+
+    /// Lines drawn together are told apart by colour: orange first, as a lift on its own is.
+    private static let lineColors: [Color] = [.or, .bl, .tx2]
+
+    /// One line, or a few on the same axes.
+    private var linesChart: some View {
+        let chart = card.chart
+        let lines = chart.series.isEmpty ? [chart.points] : chart.series.map(\.points)
+        // Body weight is blue, as on the Body screen; lifts are orange.
+        let colors = chart.metric == "body_weight" ? [Color.bl] : Self.lineColors
+        return Chart {
+            ForEach(Array(lines.enumerated()), id: \.offset) { n, points in
+                let tint = colors[n % colors.count]
+                ForEach(Array(points.enumerated()), id: \.offset) { i, p in
+                    LineMark(x: .value("Date", p.at.date), y: .value("Value", p.value), series: .value("Line", n))
+                        .foregroundStyle(tint)
+                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    PointMark(x: .value("Date", p.at.date), y: .value("Value", p.value))
+                        .foregroundStyle(i == points.count - 1 ? tint : Color.bg)
+                        .symbolSize(i == points.count - 1 ? 60 : lines.count > 1 ? 0 : 24)
+                }
+            }
+        }
+        .chartYScale(domain: .automatic(includesZero: false))
+        .chartYAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                AxisGridLine().foregroundStyle(Color.line)
+                AxisValueLabel().foregroundStyle(Color.tx3)
+            }
+        }
+    }
+
+    /// A bar a week or a month, the latest picked out. An empty one still leaves a mark.
+    private var bars: some View {
+        let points = card.chart.points
+        let peak = points.map(\.value).max() ?? 0
+        let monthly = points.count > 1 && points[1].at.date.timeIntervalSince(points[0].at.date) > 20 * 86400
+        return Chart(Array(points.enumerated()), id: \.offset) { i, p in
+            BarMark(
+                x: .value("Start", p.at.date, unit: monthly ? .month : .weekOfYear),
+                y: .value("Value", p.value > 0 ? p.value : max(peak, 1) * 0.03),
+                width: .ratio(0.62))
+                .foregroundStyle(i == points.count - 1 ? Color.tx : p.value > 0 ? Color.tx3 : Color.s2)
+                .clipShape(.rect(cornerRadius: 3))
+        }
+        .chartYAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                AxisGridLine().foregroundStyle(Color.line)
+                AxisValueLabel().foregroundStyle(Color.tx3)
+            }
+        }
+        .accessibilityLabel(card.chart.title)
     }
 
     /// "60 kg × 7 on 7 Oct" → ("60 kg", "× 7 on 7 Oct").
@@ -294,7 +422,7 @@ private struct AppliedBanner: View {
                     .contentTransition(.symbolEffect(.replace))
             }
             .frame(width: 30, height: 30)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Space.rowText) {
                 Text(state == .undone ? "Undone" : card.appliedTitle).font(.sofia(16, .semibold)).lineLimit(2)
                 if !detail.isEmpty {
                     Text(detail).font(.sofia(13.5, .regular)).foregroundStyle(Color.tx2).lineLimit(3)
