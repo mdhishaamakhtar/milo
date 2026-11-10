@@ -1,5 +1,5 @@
 # Milo monorepo tasks. Run from the repo root.
-.PHONY: up down gen lint test run live ios ios-test
+.PHONY: up down gen lint test run live ios ios-test phone
 
 # The simulator the app tests run on.
 SIM ?= iPhone 18 Pro
@@ -33,3 +33,13 @@ ios:   ## Generate the Xcode project and open it
 
 ios-test:  ## App tests on a simulator (SIM="iPhone 18 Pro" by default)
 	cd ios && xcodegen -q && $(XCODEBUILD) test
+
+# Device builds sign with MILO_TEAM_ID from .env and install on the first plugged-in iPhone.
+TEAM ?= $(shell grep -s '^MILO_TEAM_ID=' .env | cut -d= -f2)
+DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | grep -Eo '[0-9A-F]{8}-[0-9A-F]{16}' | head -1)
+
+phone:  ## Release build on your iPhone (a free Apple account needs this again every 7 days)
+	cd ios && xcodegen -q && xcodebuild -project Milo.xcodeproj -scheme Milo -configuration Release \
+		-destination 'id=$(DEVICE)' -derivedDataPath build/DerivedData \
+		-allowProvisioningUpdates DEVELOPMENT_TEAM=$(TEAM) -quiet build
+	xcrun devicectl device install app --device $(DEVICE) ios/build/DerivedData/Build/Products/Release-iphoneos/Milo.app

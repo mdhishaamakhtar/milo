@@ -101,6 +101,7 @@ This generates `ios/Milo.xcodeproj` and opens it. Pick an iPhone simulator and p
 | `make test` | root | Server tests, against a real Postgres (needs Docker) |
 | `make ios` | root | Generate the Xcode project and open it |
 | `make ios-test` | root | App tests on a simulator |
+| `make phone` | root | Release build installed on a plugged-in iPhone (needs `MILO_TEAM_ID`) |
 | `make lint` | root | `buf lint` and `go vet` |
 | `make live` | root | Milo against the real Claude API (needs a key; costs about a cent) |
 
