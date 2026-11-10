@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: milo
+      POSTGRES_PASSWORD: milo
+      POSTGRES_DB: milo
+    ports:
+      - "5433:5432"
+    volumes:
+      - milo-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U milo"]
+      interval: 2s
+      retries: 30
+volumes:
+  milo-pg:

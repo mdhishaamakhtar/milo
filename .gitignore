@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.DS_Store
+# Go
+backend/bin/
+# Xcode
+ios/Milo.xcodeproj/
+ios/build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+# Personal Hevy export and one-off importer (not part of the codebase)
+*.csv
+backend/cmd/hevy-import/
+hevy-mapping.json
+design-preview/

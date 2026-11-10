@@ -1,0 +1,37 @@
+# One contract, every client. Run from this folder: `buf generate` (or `make gen` at the repo root).
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/mdhishaamakhtar/milo/backend/gen
+    - file_option: java_package_prefix
+      value: dev.hishaam
+plugins:
+  # Go server
+  - remote: buf.build/protocolbuffers/go
+    out: ../backend/gen
+    opt: paths=source_relative
+  - remote: buf.build/connectrpc/go
+    out: ../backend/gen
+    opt: paths=source_relative
+  # iOS app
+  - remote: buf.build/apple/swift
+    out: ../ios/Milo/Generated
+    opt: FileNaming=PathToUnderscores
+  - remote: buf.build/connectrpc/swift
+    out: ../ios/Milo/Generated
+    opt:
+      - FileNaming=PathToUnderscores
+      - GenerateAsyncMethods=true
+      - GenerateCallbackMethods=false
+  # Android, when it exists:
+  # - remote: buf.build/protocolbuffers/java
+  #   out: ../android/app/src/main/java
+  #   opt: lite
+  # - remote: buf.build/protocolbuffers/kotlin
+  #   out: ../android/app/src/main/java
+  #   opt: lite
+  # - remote: buf.build/connectrpc/kotlin
+  #   out: ../android/app/src/main/java
+  #   opt: generateCoroutineMethods=true
