@@ -10,8 +10,6 @@ ios/build/
 DerivedData/
 xcuserdata/
 *.xcuserstate
-# Personal Hevy export and one-off importer (not part of the codebase)
+# Personal exports (never committed)
 *.csv
-backend/cmd/hevy-import/
-hevy-mapping.json
 design-preview/
