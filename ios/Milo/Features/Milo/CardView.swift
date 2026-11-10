@@ -23,7 +23,9 @@ struct CardView: View {
         let state = session.state(card)
         Group {
             switch (card.kind, state) {
-            case (.done, _), (_, .applied) where card.kind != .chart && card.kind != .workout:
+            // A done card always folds; an applied one folds unless it's a chart or a workout.
+            case (.done, _),
+                 (_, .applied) where card.kind != .chart && card.kind != .workout:
                 AppliedBanner(card: card, state: state, open: startsWorkout ? openRunning : nil) { session.undo(card) }
             case (.change, _) where card.lines.count == 1 && card.lines[0].label == "Workout name":
                 renameCard(state)
