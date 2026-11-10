@@ -54,13 +54,13 @@ struct MiloView: View {
             .miloScreen()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("Close")
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.tx) }.accessibilityLabel("Close")
                 }
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 7) { BarMLogo(size: 16); Text("Milo").font(.sofia(17, .bold)) }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { session?.reset(); chip = app.miloContext.chip } label: { Image(systemName: "square.and.pencil") }
+                    Button { session?.reset(); chip = app.miloContext.chip } label: { Image(systemName: "square.and.pencil").foregroundStyle(Color.tx) }
                         .accessibilityLabel("New conversation")
                 }
             }
