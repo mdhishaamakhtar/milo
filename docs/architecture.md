@@ -102,7 +102,7 @@ A few details worth knowing before changing the agent:
   running workout) goes in the user turn. (`prompt.go`)
 - **History is append-only.** A turn's messages are saved only when it finishes
   cleanly, so a dropped connection never leaves half an exchange behind.
-  (`loop.go`, `store.go`)
+  (`loop.go`, `turn.go`)
 - **Reads run side by side.** Tool calls in one reply that only read run at
   once; anything that changes the turn runs in order. (`loop.go`)
 - **Suggested replies ride on the answer.** An answer may end with a line

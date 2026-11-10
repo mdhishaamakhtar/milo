@@ -277,3 +277,35 @@ func supersetLabels(groups []string) []string {
 	}
 	return out
 }
+
+func unitName(unit string) string {
+	if unit == "lb" {
+		return "pounds"
+	}
+	return "kilograms"
+}
+
+// readingText is "82.4 kg", "18.5% body fat" or both.
+func readingText(weightKg, bodyFatPct *float64, displayUnit string) string {
+	var parts []string
+	if weightKg != nil {
+		parts = append(parts, weightIn(*weightKg, displayUnit))
+	}
+	if bodyFatPct != nil {
+		parts = append(parts, trimNum(fmt.Sprintf("%.1f", *bodyFatPct))+"% body fat")
+	}
+	return strings.Join(parts, ", ")
+}
+
+// weightIn is a kilogram value in the display unit to one decimal: "82.4 kg".
+func weightIn(kg float64, displayUnit string) string {
+	return maths.FormatTenths(displayKg(kg, displayUnit)) + " " + displayUnit
+}
+
+// sentence capitalises the first letter.
+func sentence(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}

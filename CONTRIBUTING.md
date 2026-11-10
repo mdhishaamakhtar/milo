@@ -52,7 +52,8 @@ why isn't obvious.
 
 1. Decide its kind: does it read, do something straight away, propose, or show?
    Something that rewrites or removes logged data must propose.
-2. In `backend/internal/agent`, write an input struct with `json` and
+2. In `backend/internal/agent`, in the file for its kind (`read.go`, `do.go`,
+   `propose.go` or `show.go`), write an input struct with `json` and
    `jsonschema_description` tags, and a method `func (t *turn) myTool(ctx, in) (any, error)`.
    Return `badInput(...)` for anything the model got wrong; the message goes
    back to it, so say how to fix it.

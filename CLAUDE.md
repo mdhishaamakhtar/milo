@@ -44,9 +44,9 @@ The agent is most of the server (about three quarters of its code) because the p
 
 - `agent.go` is the service: `Send` and the conversation calls.
 - `loop.go` is one turn: call the model, run its tools, repeat.
-- `turn.go` and `store.go` hold a turn's state and what is saved for the app.
+- `turn.go` holds a turn's state and what is saved for the app.
 - `prompt.go` is the system prompt and the context sent with each message.
-- `tools.go` is the list of tools. The rest are the tools themselves, by kind: reading (`read.go`, `summary.go`), doing (`workout.go`, `log.go`, `sets.go`, `profile.go`), proposing (`change.go`, `exercise.go`, `template.go`, `delete.go`), showing (`show.go`, `progress.go`).
+- `tools.go` is the list of tools. The tools themselves are four files, one per kind: `read.go` (look things up), `do.go` (done on the phone straight away, with Undo), `propose.go` (a card that waits for a tap), `show.go` (a card to look at).
 - `format.go` is how numbers and dates are written.
 
 ## Commands
