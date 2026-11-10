@@ -90,5 +90,11 @@ testdata/maths/      Test vectors both codebases run
 
 [CONTRIBUTING.md](CONTRIBUTING.md) has the conventions and step-by-step recipes
 for the common changes: a new tool for Milo, a new field on a synced row, a
-change to the maths. [PRODUCT.md](PRODUCT.md) says who Milo is for and what it
-will and won't be.
+change to the maths.
+
+## Licence
+
+Milo is free software under the [GNU General Public License v3.0](LICENSE): use
+it, change it and share it, and keep what you share under the same terms. The
+Sofia Sans typeface it bundles is under the SIL Open Font License
+(`ios/Milo/Resources/Fonts/OFL.txt`).
