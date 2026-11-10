@@ -102,7 +102,7 @@ SELECT * FROM workouts WHERE user_id = sqlc.arg(user_id) AND deleted_at IS NULL 
 ORDER BY started_at;
 
 -- name: WorkoutExercisesFor :many
-SELECT we.*, e.name AS exercise_name, e.measurement, e.unilateral, e.met, e.approximate
+SELECT we.*, e.name AS exercise_name, e.measurement, e.unilateral, e.met, e.approximate, e.primary_muscles
 FROM workout_exercises we JOIN exercises e ON e.id = we.exercise_id
 WHERE we.user_id = sqlc.arg(user_id) AND we.deleted_at IS NULL AND we.workout_id = ANY(sqlc.arg(workout_ids)::uuid[])
 ORDER BY we.workout_id, we.position;
@@ -128,11 +128,40 @@ SELECT weight_kg FROM body_measurements
 WHERE user_id = sqlc.arg(user_id) AND deleted_at IS NULL AND weight_kg IS NOT NULL AND measured_at <= sqlc.arg(at)
 ORDER BY measured_at DESC LIMIT 1;
 
+-- name: BodyMeasurementsFor :many
+SELECT * FROM body_measurements WHERE user_id = $1 AND deleted_at IS NULL ORDER BY measured_at DESC LIMIT $2;
+
+-- name: GetUserBodyMeasurement :one
+SELECT * FROM body_measurements WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;
+
 -- name: GetSettingsFor :one
-SELECT display_unit, rest_default_s FROM settings WHERE user_id = $1;
+SELECT * FROM settings WHERE user_id = $1;
 
 -- name: ExercisePrefFor :one
-SELECT unit FROM exercise_prefs WHERE user_id = $1 AND exercise_id = $2 AND deleted_at IS NULL;
+SELECT * FROM exercise_prefs WHERE user_id = $1 AND exercise_id = $2 AND deleted_at IS NULL;
+
+-- name: GetUserTemplate :one
+SELECT * FROM templates WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;
+
+-- name: RunningWorkout :one
+SELECT * FROM workouts WHERE user_id = $1 AND deleted_at IS NULL AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1;
+
+-- name: LastSessionSets :many
+-- The done sets from the last finished workout that had this exercise.
+SELECT s.* FROM sets s
+WHERE s.user_id = sqlc.arg(user_id) AND s.deleted_at IS NULL AND s.done
+  AND s.workout_exercise_id = (
+    SELECT we.id FROM workout_exercises we JOIN workouts w ON w.id = we.workout_id
+    WHERE we.user_id = sqlc.arg(user_id) AND we.exercise_id = sqlc.arg(exercise_id)
+      AND we.deleted_at IS NULL AND w.deleted_at IS NULL AND w.ended_at IS NOT NULL
+    ORDER BY w.started_at DESC LIMIT 1)
+ORDER BY s.position;
+
+-- name: WorkoutExercisesUsing :many
+-- Every place an exercise was logged, for merging it into another.
+SELECT we.* FROM workout_exercises we JOIN workouts w ON w.id = we.workout_id
+WHERE we.user_id = sqlc.arg(user_id) AND we.exercise_id = sqlc.arg(exercise_id)
+  AND we.deleted_at IS NULL AND w.deleted_at IS NULL;
 
 -- name: GetUserSet :one
 SELECT * FROM sets WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;
@@ -150,6 +179,3 @@ ORDER BY position DESC LIMIT 1;
 
 -- name: MaxExercisePosition :one
 SELECT COALESCE(max(position), 0)::integer FROM workout_exercises WHERE workout_id = $1 AND user_id = $2 AND deleted_at IS NULL;
-
--- name: MaxSetPosition :one
-SELECT COALESCE(max(position), 0)::integer FROM sets WHERE workout_exercise_id = $1 AND user_id = $2 AND deleted_at IS NULL;

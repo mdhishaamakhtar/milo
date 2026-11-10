@@ -114,14 +114,6 @@ func (t *turn) getWorkouts(ctx context.Context, in workoutsInput) (any, error) {
 	return map[string]any{"workouts": out}, nil
 }
 
-func (t *turn) startOfDay(date string) (time.Time, error) {
-	d, err := time.ParseInLocation(time.DateOnly, date, t.loc)
-	if err != nil {
-		return time.Time{}, badInput("date %q must be YYYY-MM-DD", date)
-	}
-	return d, nil
-}
-
 type historyInput struct {
 	ExerciseID string `json:"exercise_id"`
 	Limit      int32  `json:"limit,omitempty" jsonschema_description:"Sessions to read, at most 40. Default 12."`

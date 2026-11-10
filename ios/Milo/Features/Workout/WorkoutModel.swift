@@ -88,6 +88,13 @@ final class WorkoutModel {
         app.edited()
     }
 
+    func setKind(_ kind: SetKind, for set: LoggedSet) {
+        var s = set
+        s.kind = kind
+        try? app.db.update(s)
+        app.edited()
+    }
+
     func delete(_ set: LoggedSet) {
         if editing?.setID == set.id { closePad() }
         try? app.db.deleteSet(set.id)

@@ -151,10 +151,6 @@ nonisolated struct WorkoutExercise: Identifiable, Hashable, SyncedRecord {
     var syncKey: UUID { id }
 }
 
-nonisolated enum SetKind: String, Codable, Sendable {
-    case normal, warmup, drop, failure
-}
-
 nonisolated struct LoggedSet: Identifiable, Hashable, SyncedRecord {
     static let databaseTableName = "loggedSet"
     static let syncTable = "set"
@@ -177,7 +173,7 @@ nonisolated struct LoggedSet: Identifiable, Hashable, SyncedRecord {
     var syncKey: UUID { id }
 
     func input(_ measurement: MeasurementKind) -> Maths.SetInput {
-        Maths.SetInput(measurement: measurement, weight: weight, unit: unit, reps: reps ?? 0, perSide: perSide, done: done)
+        Maths.SetInput(measurement: measurement, weight: weight, unit: unit, reps: reps ?? 0, perSide: perSide, done: done, kind: kind)
     }
 }
 

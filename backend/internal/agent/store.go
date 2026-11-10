@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -52,6 +53,7 @@ func (t *turn) emitCard(ctx context.Context, card *milo.Card) (string, error) {
 	id := newID()
 	card.Id = id.String()
 	card.Status = milo.CardStatus_CARD_STATUS_PENDING
+	card.AppliedTitle = cmp.Or(card.AppliedTitle, card.Title)
 	b, err := protojson.Marshal(card)
 	if err != nil {
 		return "", fmt.Errorf("encode card: %w", err)

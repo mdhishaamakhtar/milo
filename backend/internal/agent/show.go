@@ -1,11 +1,10 @@
 package agent
 
 import (
+	"cmp"
 	"context"
-	"errors"
 	"fmt"
-
-	"github.com/jackc/pgx/v5"
+	"slices"
 
 	"github.com/mdhishaamakhtar/milo/backend/gen/milo"
 	"github.com/mdhishaamakhtar/milo/backend/internal/db/query"
@@ -14,22 +13,25 @@ import (
 )
 
 type chartInput struct {
-	ExerciseID string `json:"exercise_id"`
-	Metric     string `json:"metric" jsonschema:"enum=top_set,enum=volume,enum=e1rm"`
-	Caption    string `json:"caption,omitempty"`
+	Metric     string `json:"metric" jsonschema:"enum=top_set,enum=volume,enum=e1rm,enum=body_weight"`
+	ExerciseID string `json:"exercise_id,omitempty" jsonschema_description:"The exercise to chart; not needed for body_weight."`
+	Caption    string `json:"caption,omitempty" jsonschema_description:"One line under the chart saying what it shows."`
 }
 
 var metricTitles = map[string]string{"top_set": "top set", "volume": "volume", "e1rm": "estimated 1RM"}
 
-// showChart charts one exercise over time, in the user's display unit.
+// showChart charts one exercise, or body weight, over time in the user's display unit.
 func (t *turn) showChart(ctx context.Context, in chartInput) (any, error) {
-	id, err := parseUUID(in.ExerciseID, "exercise_id")
-	if err != nil {
-		return nil, err
+	if in.Metric == "body_weight" {
+		return t.showBodyWeight(ctx, in.Caption)
 	}
 	title, ok := metricTitles[in.Metric]
 	if !ok {
-		return nil, badInput("metric must be top_set, volume or e1rm")
+		return nil, badInput("metric must be top_set, volume, e1rm or body_weight")
+	}
+	id, err := parseUUID(in.ExerciseID, "exercise_id")
+	if err != nil {
+		return nil, err
 	}
 	ex, sessions, err := t.sessions(ctx, id, 60)
 	if err != nil {
@@ -37,10 +39,9 @@ func (t *turn) showChart(ctx context.Context, in chartInput) (any, error) {
 	}
 	body := t.bodyKg(ctx)
 	chart := &milo.Chart{Title: ex.Name + ", " + title, Metric: in.Metric, Unit: rows.Parse[milo.WeightUnit](t.displayUnit), Caption: in.Caption}
-	var best *milo.ChartPoint
-	for i := len(sessions) - 1; i >= 0; i-- { // oldest first
-		sum := maths.Summarize(setInputs(ex.Measurement, sessions[i].sets), body)
-		p := &milo.ChartPoint{At: ts(sessions[i].at)}
+	for _, s := range slices.Backward(sessions) { // oldest first
+		sum := maths.Summarize(setInputs(ex.Measurement, s.sets), body)
+		p := &milo.ChartPoint{At: ts(s.at)}
 		switch {
 		case in.Metric == "top_set" && sum.HasTop:
 			p.Value = displayKg(sum.TopLoadKg, t.displayUnit)
@@ -55,22 +56,40 @@ func (t *turn) showChart(ctx context.Context, in chartInput) (any, error) {
 			continue
 		}
 		chart.Points = append(chart.Points, p)
-		if best == nil || p.Value > best.Value {
-			best = p
-		}
 	}
-	if best == nil {
+	if len(chart.Points) == 0 {
 		return nil, badInput("no %s data for %s yet", title, ex.Name)
 	}
-	card := &milo.Card{
-		Kind: milo.CardKind_CARD_KIND_CHART, Title: chart.Title, ExerciseId: id.String(), Chart: chart,
-		Subtitle: best.Label + " on " + t.day(best.At.AsTime()),
-	}
-	cardID, err := t.emitCard(ctx, card)
+	best := slices.MaxFunc(chart.Points, func(a, b *milo.ChartPoint) int { return cmp.Compare(a.Value, b.Value) })
+	return t.emitChart(ctx, &milo.Card{Title: chart.Title, ExerciseId: id.String(), Chart: chart, Subtitle: best.Label + " on " + t.day(best.At.AsTime())})
+}
+
+// showBodyWeight charts the last year of body weight readings.
+func (t *turn) showBodyWeight(ctx context.Context, caption string) (any, error) {
+	readings, err := t.s.q.BodyMeasurementsFor(ctx, query.BodyMeasurementsForParams{UserID: t.userID, Limit: 400})
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"card_id": cardID, "points": len(chart.Points), "best": card.Subtitle}, nil
+	chart := &milo.Chart{Title: "Body weight", Metric: "body_weight", Unit: rows.Parse[milo.WeightUnit](t.displayUnit), Caption: caption}
+	for _, m := range slices.Backward(readings) { // oldest first
+		if m.WeightKg != nil && m.MeasuredAt.After(t.now.AddDate(-1, 0, 0)) {
+			chart.Points = append(chart.Points, &milo.ChartPoint{At: ts(m.MeasuredAt), Value: displayKg(*m.WeightKg, t.displayUnit), Label: weightIn(*m.WeightKg, t.displayUnit)})
+		}
+	}
+	if len(chart.Points) == 0 {
+		return nil, badInput("no body weight readings in the last year")
+	}
+	latest := chart.Points[len(chart.Points)-1]
+	return t.emitChart(ctx, &milo.Card{Title: chart.Title, Chart: chart, Subtitle: latest.Label + " on " + t.day(latest.At.AsTime())})
+}
+
+func (t *turn) emitChart(ctx context.Context, card *milo.Card) (any, error) {
+	card.Kind = milo.CardKind_CARD_KIND_CHART
+	id, err := t.emitCard(ctx, card)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"card_id": id, "points": len(card.Chart.Points), "headline": card.Subtitle}, nil
 }
 
 type workoutInput struct {
@@ -83,10 +102,7 @@ func (t *turn) showWorkout(ctx context.Context, in workoutInput) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	w, err := t.s.q.GetUserWorkout(ctx, query.GetUserWorkoutParams{ID: id, UserID: t.userID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, badInput("no workout %s in this user's log", id)
-	}
+	w, err := t.userWorkout(ctx, id)
 	if err != nil {
 		return nil, err
 	}

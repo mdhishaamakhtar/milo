@@ -11,8 +11,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/mdhishaamakhtar/milo/backend/gen/milo"
-	"github.com/mdhishaamakhtar/milo/backend/internal/testkit"
 	"github.com/mdhishaamakhtar/milo/backend/internal/config"
+	"github.com/mdhishaamakhtar/milo/backend/internal/testkit"
 )
 
 func ts(t time.Time) *timestamppb.Timestamp { return timestamppb.New(t) }

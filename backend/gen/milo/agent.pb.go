@@ -28,9 +28,10 @@ const (
 	CardKind_CARD_KIND_UNSPECIFIED CardKind = 0
 	// A movement Milo worked out, with sets to add. Add to workout / Edit.
 	CardKind_CARD_KIND_NEW_EXERCISE CardKind = 1
-	// Sets for a known exercise. Applied on arrival, with Undo.
-	CardKind_CARD_KIND_LOGGED CardKind = 2
-	// Before/after edit of existing rows. Apply change / Not now.
+	// Something Milo did because it was asked to: sets logged, a workout started.
+	// Applied on arrival and shown as one line with Undo.
+	CardKind_CARD_KIND_DONE CardKind = 2
+	// A before/after edit, or a delete, of existing rows. Apply / Not now.
 	CardKind_CARD_KIND_CHANGE CardKind = 3
 	// A template drafted in conversation. Save template / Edit list.
 	CardKind_CARD_KIND_TEMPLATE_DRAFT CardKind = 4
@@ -45,7 +46,7 @@ var (
 	CardKind_name = map[int32]string{
 		0: "CARD_KIND_UNSPECIFIED",
 		1: "CARD_KIND_NEW_EXERCISE",
-		2: "CARD_KIND_LOGGED",
+		2: "CARD_KIND_DONE",
 		3: "CARD_KIND_CHANGE",
 		4: "CARD_KIND_TEMPLATE_DRAFT",
 		5: "CARD_KIND_CHART",
@@ -54,7 +55,7 @@ var (
 	CardKind_value = map[string]int32{
 		"CARD_KIND_UNSPECIFIED":    0,
 		"CARD_KIND_NEW_EXERCISE":   1,
-		"CARD_KIND_LOGGED":         2,
+		"CARD_KIND_DONE":           2,
 		"CARD_KIND_CHANGE":         3,
 		"CARD_KIND_TEMPLATE_DRAFT": 4,
 		"CARD_KIND_CHART":          5,
@@ -613,13 +614,19 @@ type Card struct {
 	// Versions of existing rows the changes were based on.
 	Base  []*RowVersion `protobuf:"bytes,7,rep,name=base,proto3" json:"base,omitempty"`
 	Chart *Chart        `protobuf:"bytes,8,opt,name=chart,proto3" json:"chart,omitempty"`
-	// Apply without a tap (sets for known exercises).
+	// Apply without a tap.
 	AutoApply  bool   `protobuf:"varint,9,opt,name=auto_apply,json=autoApply,proto3" json:"auto_apply,omitempty"`
 	WorkoutId  string `protobuf:"bytes,10,opt,name=workout_id,json=workoutId,proto3" json:"workout_id,omitempty"`
 	ExerciseId string `protobuf:"bytes,11,opt,name=exercise_id,json=exerciseId,proto3" json:"exercise_id,omitempty"`
 	// A short line under the card, e.g. "Good enough to log now."
-	Note          string     `protobuf:"bytes,12,opt,name=note,proto3" json:"note,omitempty"`
-	Status        CardStatus `protobuf:"varint,13,opt,name=status,proto3,enum=milo.CardStatus" json:"status,omitempty"`
+	Note   string     `protobuf:"bytes,12,opt,name=note,proto3" json:"note,omitempty"`
+	Status CardStatus `protobuf:"varint,13,opt,name=status,proto3,enum=milo.CardStatus" json:"status,omitempty"`
+	// The apply button, when "Apply change" doesn't say it: "Delete workout".
+	ApplyLabel string `protobuf:"bytes,14,opt,name=apply_label,json=applyLabel,proto3" json:"apply_label,omitempty"`
+	// Applying removes something; the button is red.
+	Destructive bool `protobuf:"varint,15,opt,name=destructive,proto3" json:"destructive,omitempty"`
+	// What the card says once applied: "Deleted Push Day".
+	AppliedTitle  string `protobuf:"bytes,16,opt,name=applied_title,json=appliedTitle,proto3" json:"applied_title,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -745,6 +752,27 @@ func (x *Card) GetStatus() CardStatus {
 	return CardStatus_CARD_STATUS_UNSPECIFIED
 }
 
+func (x *Card) GetApplyLabel() string {
+	if x != nil {
+		return x.ApplyLabel
+	}
+	return ""
+}
+
+func (x *Card) GetDestructive() bool {
+	if x != nil {
+		return x.Destructive
+	}
+	return false
+}
+
+func (x *Card) GetAppliedTitle() string {
+	if x != nil {
+		return x.AppliedTitle
+	}
+	return ""
+}
+
 type CardLine struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Label         string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
@@ -808,7 +836,7 @@ func (x *CardLine) GetAfter() string {
 type Chart struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Title string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
-	// "top_set", "volume" or "e1rm".
+	// "top_set", "volume", "e1rm" or "body_weight".
 	Metric        string        `protobuf:"bytes,2,opt,name=metric,proto3" json:"metric,omitempty"`
 	Unit          WeightUnit    `protobuf:"varint,3,opt,name=unit,proto3,enum=milo.WeightUnit" json:"unit,omitempty"`
 	Points        []*ChartPoint `protobuf:"bytes,4,rep,name=points,proto3" json:"points,omitempty"`
@@ -1448,7 +1476,7 @@ const file_milo_agent_proto_rawDesc = "" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\"C\n" +
 	"\tMiloError\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x1c\n" +
-	"\tretryable\x18\x02 \x01(\bR\tretryable\"\xa0\x03\n" +
+	"\tretryable\x18\x02 \x01(\bR\tretryable\"\x88\x04\n" +
 	"\x04Card\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\"\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x0e.milo.CardKindR\x04kind\x12\x14\n" +
@@ -1466,7 +1494,11 @@ const file_milo_agent_proto_rawDesc = "" +
 	"\vexercise_id\x18\v \x01(\tR\n" +
 	"exerciseId\x12\x12\n" +
 	"\x04note\x18\f \x01(\tR\x04note\x12(\n" +
-	"\x06status\x18\r \x01(\x0e2\x10.milo.CardStatusR\x06status\"N\n" +
+	"\x06status\x18\r \x01(\x0e2\x10.milo.CardStatusR\x06status\x12\x1f\n" +
+	"\vapply_label\x18\x0e \x01(\tR\n" +
+	"applyLabel\x12 \n" +
+	"\vdestructive\x18\x0f \x01(\bR\vdestructive\x12#\n" +
+	"\rapplied_title\x18\x10 \x01(\tR\fappliedTitle\"N\n" +
 	"\bCardLine\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x16\n" +
 	"\x06before\x18\x02 \x01(\tR\x06before\x12\x14\n" +
@@ -1510,11 +1542,11 @@ const file_milo_agent_proto_rawDesc = "" +
 	"\x14SetCardStatusRequest\x12\x17\n" +
 	"\acard_id\x18\x01 \x01(\tR\x06cardId\x12(\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x10.milo.CardStatusR\x06status\"\x17\n" +
-	"\x15SetCardStatusResponse*\xb7\x01\n" +
+	"\x15SetCardStatusResponse*\xb5\x01\n" +
 	"\bCardKind\x12\x19\n" +
 	"\x15CARD_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
-	"\x16CARD_KIND_NEW_EXERCISE\x10\x01\x12\x14\n" +
-	"\x10CARD_KIND_LOGGED\x10\x02\x12\x14\n" +
+	"\x16CARD_KIND_NEW_EXERCISE\x10\x01\x12\x12\n" +
+	"\x0eCARD_KIND_DONE\x10\x02\x12\x14\n" +
 	"\x10CARD_KIND_CHANGE\x10\x03\x12\x1c\n" +
 	"\x18CARD_KIND_TEMPLATE_DRAFT\x10\x04\x12\x13\n" +
 	"\x0fCARD_KIND_CHART\x10\x05\x12\x15\n" +

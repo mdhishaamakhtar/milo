@@ -76,12 +76,14 @@ extension View {
 /// Off-white primary button with dark text, full width.
 struct PrimaryButtonStyle: ButtonStyle {
     var compact = false
+    /// Red, for a button that deletes.
+    var destructive = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(compact ? .buttonSmall : .button)
-            .foregroundStyle(Color.bg)
+            .foregroundStyle(destructive ? Color.white : Color.bg)
             .frame(maxWidth: .infinity, minHeight: compact ? 46 : 54)
-            .background(Color.tx.opacity(configuration.isPressed ? 0.85 : 1), in: .capsule)
+            .background((destructive ? Color.red : Color.tx).opacity(configuration.isPressed ? 0.85 : 1), in: .capsule)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.snappy(duration: 0.18), value: configuration.isPressed)
     }

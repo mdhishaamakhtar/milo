@@ -141,6 +141,16 @@ final class HealthService {
         }
     }
 
+    /// Keeps Health in step with a workout changed away from the workout screen (by a
+    /// Milo card, or its undo): one that is now finished is saved if it just finished or
+    /// was saved before; one that is gone, or running again, is taken out.
+    func follow(before: Workout?, after: Workout?) async {
+        func finished(_ w: Workout?) -> Bool { w.map { !$0.deleted && $0.endedAt != nil } ?? false }
+        let saved = before?.healthUUID
+        if let saved, saved != after?.healthUUID || !finished(after) { await remove(saved) }
+        if let after, finished(after), saved != nil || !finished(before) { await save(workoutID: after.id) }
+    }
+
     private static var configuration: HKWorkoutConfiguration {
         let c = HKWorkoutConfiguration()
         c.activityType = .traditionalStrengthTraining

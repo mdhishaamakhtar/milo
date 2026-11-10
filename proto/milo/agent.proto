@@ -67,9 +67,10 @@ enum CardKind {
   CARD_KIND_UNSPECIFIED = 0;
   // A movement Milo worked out, with sets to add. Add to workout / Edit.
   CARD_KIND_NEW_EXERCISE = 1;
-  // Sets for a known exercise. Applied on arrival, with Undo.
-  CARD_KIND_LOGGED = 2;
-  // Before/after edit of existing rows. Apply change / Not now.
+  // Something Milo did because it was asked to: sets logged, a workout started.
+  // Applied on arrival and shown as one line with Undo.
+  CARD_KIND_DONE = 2;
+  // A before/after edit, or a delete, of existing rows. Apply / Not now.
   CARD_KIND_CHANGE = 3;
   // A template drafted in conversation. Save template / Edit list.
   CARD_KIND_TEMPLATE_DRAFT = 4;
@@ -99,13 +100,19 @@ message Card {
   // Versions of existing rows the changes were based on.
   repeated RowVersion base = 7;
   Chart chart = 8;
-  // Apply without a tap (sets for known exercises).
+  // Apply without a tap.
   bool auto_apply = 9;
   string workout_id = 10;
   string exercise_id = 11;
   // A short line under the card, e.g. "Good enough to log now."
   string note = 12;
   CardStatus status = 13;
+  // The apply button, when "Apply change" doesn't say it: "Delete workout".
+  string apply_label = 14;
+  // Applying removes something; the button is red.
+  bool destructive = 15;
+  // What the card says once applied: "Deleted Push Day".
+  string applied_title = 16;
 }
 
 message CardLine {
@@ -116,7 +123,7 @@ message CardLine {
 
 message Chart {
   string title = 1;
-  // "top_set", "volume" or "e1rm".
+  // "top_set", "volume", "e1rm" or "body_weight".
   string metric = 2;
   WeightUnit unit = 3;
   repeated ChartPoint points = 4;

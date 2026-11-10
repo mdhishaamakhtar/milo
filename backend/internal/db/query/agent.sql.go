@@ -43,6 +43,45 @@ func (q *Queries) AddUsage(ctx context.Context, arg AddUsageParams) error {
 	return err
 }
 
+const bodyMeasurementsFor = `-- name: BodyMeasurementsFor :many
+SELECT id, user_id, measured_at, weight_kg, body_fat_pct, source, updated_at, deleted_at, server_seq FROM body_measurements WHERE user_id = $1 AND deleted_at IS NULL ORDER BY measured_at DESC LIMIT $2
+`
+
+type BodyMeasurementsForParams struct {
+	UserID uuid.UUID
+	Limit  int32
+}
+
+func (q *Queries) BodyMeasurementsFor(ctx context.Context, arg BodyMeasurementsForParams) ([]BodyMeasurement, error) {
+	rows, err := q.db.Query(ctx, bodyMeasurementsFor, arg.UserID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BodyMeasurement
+	for rows.Next() {
+		var i BodyMeasurement
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.MeasuredAt,
+			&i.WeightKg,
+			&i.BodyFatPct,
+			&i.Source,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.ServerSeq,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createConversation = `-- name: CreateConversation :one
 
 INSERT INTO milo_conversations (id, user_id, title) VALUES ($1, $2, $3) RETURNING id, user_id, title, summary, created_at, updated_at
@@ -70,7 +109,7 @@ func (q *Queries) CreateConversation(ctx context.Context, arg CreateConversation
 }
 
 const exercisePrefFor = `-- name: ExercisePrefFor :one
-SELECT unit FROM exercise_prefs WHERE user_id = $1 AND exercise_id = $2 AND deleted_at IS NULL
+SELECT user_id, exercise_id, unit, rest_s, updated_at, deleted_at, server_seq FROM exercise_prefs WHERE user_id = $1 AND exercise_id = $2 AND deleted_at IS NULL
 `
 
 type ExercisePrefForParams struct {
@@ -78,11 +117,19 @@ type ExercisePrefForParams struct {
 	ExerciseID uuid.UUID
 }
 
-func (q *Queries) ExercisePrefFor(ctx context.Context, arg ExercisePrefForParams) (string, error) {
+func (q *Queries) ExercisePrefFor(ctx context.Context, arg ExercisePrefForParams) (ExercisePref, error) {
 	row := q.db.QueryRow(ctx, exercisePrefFor, arg.UserID, arg.ExerciseID)
-	var unit string
-	err := row.Scan(&unit)
-	return unit, err
+	var i ExercisePref
+	err := row.Scan(
+		&i.UserID,
+		&i.ExerciseID,
+		&i.Unit,
+		&i.RestS,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ServerSeq,
+	)
+	return i, err
 }
 
 const exerciseSessions = `-- name: ExerciseSessions :many
@@ -186,18 +233,48 @@ func (q *Queries) GetConversation(ctx context.Context, arg GetConversationParams
 }
 
 const getSettingsFor = `-- name: GetSettingsFor :one
-SELECT display_unit, rest_default_s FROM settings WHERE user_id = $1
+SELECT user_id, display_unit, rest_default_s, height_cm, birth_date, sex, updated_at, server_seq FROM settings WHERE user_id = $1
 `
 
-type GetSettingsForRow struct {
-	DisplayUnit  string
-	RestDefaultS int32
+func (q *Queries) GetSettingsFor(ctx context.Context, userID uuid.UUID) (Setting, error) {
+	row := q.db.QueryRow(ctx, getSettingsFor, userID)
+	var i Setting
+	err := row.Scan(
+		&i.UserID,
+		&i.DisplayUnit,
+		&i.RestDefaultS,
+		&i.HeightCm,
+		&i.BirthDate,
+		&i.Sex,
+		&i.UpdatedAt,
+		&i.ServerSeq,
+	)
+	return i, err
 }
 
-func (q *Queries) GetSettingsFor(ctx context.Context, userID uuid.UUID) (GetSettingsForRow, error) {
-	row := q.db.QueryRow(ctx, getSettingsFor, userID)
-	var i GetSettingsForRow
-	err := row.Scan(&i.DisplayUnit, &i.RestDefaultS)
+const getUserBodyMeasurement = `-- name: GetUserBodyMeasurement :one
+SELECT id, user_id, measured_at, weight_kg, body_fat_pct, source, updated_at, deleted_at, server_seq FROM body_measurements WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+`
+
+type GetUserBodyMeasurementParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) GetUserBodyMeasurement(ctx context.Context, arg GetUserBodyMeasurementParams) (BodyMeasurement, error) {
+	row := q.db.QueryRow(ctx, getUserBodyMeasurement, arg.ID, arg.UserID)
+	var i BodyMeasurement
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.MeasuredAt,
+		&i.WeightKg,
+		&i.BodyFatPct,
+		&i.Source,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ServerSeq,
+	)
 	return i, err
 }
 
@@ -227,6 +304,31 @@ func (q *Queries) GetUserSet(ctx context.Context, arg GetUserSetParams) (Set, er
 		&i.DistanceM,
 		&i.Rpe,
 		&i.Done,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ServerSeq,
+	)
+	return i, err
+}
+
+const getUserTemplate = `-- name: GetUserTemplate :one
+SELECT id, user_id, name, notes, items, updated_at, deleted_at, server_seq FROM templates WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+`
+
+type GetUserTemplateParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) GetUserTemplate(ctx context.Context, arg GetUserTemplateParams) (Template, error) {
+	row := q.db.QueryRow(ctx, getUserTemplate, arg.ID, arg.UserID)
+	var i Template
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Notes,
+		&i.Items,
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.ServerSeq,
@@ -342,6 +444,60 @@ func (q *Queries) InsertMiloItem(ctx context.Context, arg InsertMiloItemParams) 
 	var i InsertMiloItemRow
 	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
+}
+
+const lastSessionSets = `-- name: LastSessionSets :many
+SELECT s.id, s.user_id, s.workout_exercise_id, s.position, s.kind, s.reps, s.weight, s.weight_unit, s.per_side, s.duration_s, s.distance_m, s.rpe, s.done, s.updated_at, s.deleted_at, s.server_seq FROM sets s
+WHERE s.user_id = $1 AND s.deleted_at IS NULL AND s.done
+  AND s.workout_exercise_id = (
+    SELECT we.id FROM workout_exercises we JOIN workouts w ON w.id = we.workout_id
+    WHERE we.user_id = $1 AND we.exercise_id = $2
+      AND we.deleted_at IS NULL AND w.deleted_at IS NULL AND w.ended_at IS NOT NULL
+    ORDER BY w.started_at DESC LIMIT 1)
+ORDER BY s.position
+`
+
+type LastSessionSetsParams struct {
+	UserID     uuid.UUID
+	ExerciseID uuid.UUID
+}
+
+// The done sets from the last finished workout that had this exercise.
+func (q *Queries) LastSessionSets(ctx context.Context, arg LastSessionSetsParams) ([]Set, error) {
+	rows, err := q.db.Query(ctx, lastSessionSets, arg.UserID, arg.ExerciseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Set
+	for rows.Next() {
+		var i Set
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.WorkoutExerciseID,
+			&i.Position,
+			&i.Kind,
+			&i.Reps,
+			&i.Weight,
+			&i.WeightUnit,
+			&i.PerSide,
+			&i.DurationS,
+			&i.DistanceM,
+			&i.Rpe,
+			&i.Done,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.ServerSeq,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const latestBodyWeight = `-- name: LatestBodyWeight :one
@@ -524,22 +680,6 @@ func (q *Queries) MaxExercisePosition(ctx context.Context, arg MaxExercisePositi
 	return column_1, err
 }
 
-const maxSetPosition = `-- name: MaxSetPosition :one
-SELECT COALESCE(max(position), 0)::integer FROM sets WHERE workout_exercise_id = $1 AND user_id = $2 AND deleted_at IS NULL
-`
-
-type MaxSetPositionParams struct {
-	WorkoutExerciseID uuid.UUID
-	UserID            uuid.UUID
-}
-
-func (q *Queries) MaxSetPosition(ctx context.Context, arg MaxSetPositionParams) (int32, error) {
-	row := q.db.QueryRow(ctx, maxSetPosition, arg.WorkoutExerciseID, arg.UserID)
-	var column_1 int32
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const recentWorkouts = `-- name: RecentWorkouts :many
 SELECT id, user_id, name, notes, started_at, ended_at, template_id, health_uuid, updated_at, deleted_at, server_seq FROM workouts WHERE user_id = $1 AND deleted_at IS NULL ORDER BY started_at DESC LIMIT $2
 `
@@ -579,6 +719,29 @@ func (q *Queries) RecentWorkouts(ctx context.Context, arg RecentWorkoutsParams) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const runningWorkout = `-- name: RunningWorkout :one
+SELECT id, user_id, name, notes, started_at, ended_at, template_id, health_uuid, updated_at, deleted_at, server_seq FROM workouts WHERE user_id = $1 AND deleted_at IS NULL AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1
+`
+
+func (q *Queries) RunningWorkout(ctx context.Context, userID uuid.UUID) (Workout, error) {
+	row := q.db.QueryRow(ctx, runningWorkout, userID)
+	var i Workout
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Notes,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.TemplateID,
+		&i.HealthUuid,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ServerSeq,
+	)
+	return i, err
 }
 
 const searchExercises = `-- name: SearchExercises :many
@@ -896,7 +1059,7 @@ func (q *Queries) VisibleExercise(ctx context.Context, arg VisibleExerciseParams
 }
 
 const workoutExercisesFor = `-- name: WorkoutExercisesFor :many
-SELECT we.id, we.user_id, we.workout_id, we.exercise_id, we.position, we.group_label, we.notes, we.updated_at, we.deleted_at, we.server_seq, e.name AS exercise_name, e.measurement, e.unilateral, e.met, e.approximate
+SELECT we.id, we.user_id, we.workout_id, we.exercise_id, we.position, we.group_label, we.notes, we.updated_at, we.deleted_at, we.server_seq, e.name AS exercise_name, e.measurement, e.unilateral, e.met, e.approximate, e.primary_muscles
 FROM workout_exercises we JOIN exercises e ON e.id = we.exercise_id
 WHERE we.user_id = $1 AND we.deleted_at IS NULL AND we.workout_id = ANY($2::uuid[])
 ORDER BY we.workout_id, we.position
@@ -908,21 +1071,22 @@ type WorkoutExercisesForParams struct {
 }
 
 type WorkoutExercisesForRow struct {
-	ID           uuid.UUID
-	UserID       uuid.UUID
-	WorkoutID    uuid.UUID
-	ExerciseID   uuid.UUID
-	Position     int32
-	GroupLabel   string
-	Notes        string
-	UpdatedAt    time.Time
-	DeletedAt    *time.Time
-	ServerSeq    int64
-	ExerciseName string
-	Measurement  string
-	Unilateral   bool
-	Met          *float64
-	Approximate  bool
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	WorkoutID      uuid.UUID
+	ExerciseID     uuid.UUID
+	Position       int32
+	GroupLabel     string
+	Notes          string
+	UpdatedAt      time.Time
+	DeletedAt      *time.Time
+	ServerSeq      int64
+	ExerciseName   string
+	Measurement    string
+	Unilateral     bool
+	Met            *float64
+	Approximate    bool
+	PrimaryMuscles []string
 }
 
 func (q *Queries) WorkoutExercisesFor(ctx context.Context, arg WorkoutExercisesForParams) ([]WorkoutExercisesForRow, error) {
@@ -950,6 +1114,50 @@ func (q *Queries) WorkoutExercisesFor(ctx context.Context, arg WorkoutExercisesF
 			&i.Unilateral,
 			&i.Met,
 			&i.Approximate,
+			&i.PrimaryMuscles,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const workoutExercisesUsing = `-- name: WorkoutExercisesUsing :many
+SELECT we.id, we.user_id, we.workout_id, we.exercise_id, we.position, we.group_label, we.notes, we.updated_at, we.deleted_at, we.server_seq FROM workout_exercises we JOIN workouts w ON w.id = we.workout_id
+WHERE we.user_id = $1 AND we.exercise_id = $2
+  AND we.deleted_at IS NULL AND w.deleted_at IS NULL
+`
+
+type WorkoutExercisesUsingParams struct {
+	UserID     uuid.UUID
+	ExerciseID uuid.UUID
+}
+
+// Every place an exercise was logged, for merging it into another.
+func (q *Queries) WorkoutExercisesUsing(ctx context.Context, arg WorkoutExercisesUsingParams) ([]WorkoutExercise, error) {
+	rows, err := q.db.Query(ctx, workoutExercisesUsing, arg.UserID, arg.ExerciseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkoutExercise
+	for rows.Next() {
+		var i WorkoutExercise
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.WorkoutID,
+			&i.ExerciseID,
+			&i.Position,
+			&i.GroupLabel,
+			&i.Notes,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.ServerSeq,
 		); err != nil {
 			return nil, err
 		}

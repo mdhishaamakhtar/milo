@@ -9,9 +9,9 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/mdhishaamakhtar/milo/backend/gen/milo"
-	"github.com/mdhishaamakhtar/milo/backend/internal/testkit"
-	"github.com/mdhishaamakhtar/milo/backend/internal/config"
 	"github.com/mdhishaamakhtar/milo/backend/internal/agent"
+	"github.com/mdhishaamakhtar/milo/backend/internal/config"
+	"github.com/mdhishaamakhtar/milo/backend/internal/testkit"
 )
 
 // TestLiveEvals runs Milo against the real Claude API. It costs money, so it
@@ -105,7 +105,7 @@ func TestLiveEvals(t *testing.T) {
 		t.Logf("milo: %s", ev.text)
 		var logged *milo.Card
 		for _, c := range ev.cards {
-			if c.GetKind() == milo.CardKind_CARD_KIND_LOGGED {
+			if c.GetKind() == milo.CardKind_CARD_KIND_DONE {
 				logged = c
 			}
 		}

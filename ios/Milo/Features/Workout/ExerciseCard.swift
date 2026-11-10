@@ -113,22 +113,34 @@ struct ExerciseCard: View {
             .font(.cap)
             .foregroundStyle(Color.tx3)
 
+            let marks = SetMark.marks(entry.sets.map(\.kind))
             ForEach(Array(entry.sets.enumerated()), id: \.element.id) { i, set in
-                row(i, set)
+                row(i, set, mark: marks[i])
                     .swipeToDelete("Delete set") { model.delete(set) }
-                    .contextMenu {
-                        Button("Delete set", systemImage: "trash", role: .destructive) { model.delete(set) }
-                    }
+                    .contextMenu { setMenu(set) }
             }
         }
     }
 
-    private func row(_ i: Int, _ set: LoggedSet) -> some View {
+    /// What kind of set it is, and delete. On the set number and on a long press.
+    @ViewBuilder private func setMenu(_ set: LoggedSet) -> some View {
+        Picker("Kind of set", selection: Binding(get: { set.kind }, set: { model.setKind($0, for: set) })) {
+            ForEach(SetKind.allCases, id: \.self) { Text($0.title).tag($0) }
+        }
+        Button("Delete set", systemImage: "trash", role: .destructive) { model.delete(set) }
+    }
+
+    private func row(_ i: Int, _ set: LoggedSet, mark: SetMark) -> some View {
         HStack(spacing: 8) {
-            Text("\(i + 1)")
-                .font(.sofia(15, .bold))
-                .foregroundStyle(set.id == currentSetID ? Color.tx : Color.tx3)
-                .frame(width: 26)
+            Menu { setMenu(set) } label: {
+                Text(mark.text)
+                    .font(.sofia(15, .bold))
+                    .foregroundStyle(mark.isLetter ? Color.or : set.id == currentSetID ? Color.tx : Color.tx3)
+                    .frame(width: 26, height: 42)
+                    .contentShape(.rect)
+            }
+            .accessibilityLabel(set.kind == .normal ? "Set \(mark.text)" : set.kind.title)
+            .accessibilityHint("Changes the kind of set")
             Text(lastTime(i))
                 .font(.sofia(15, .medium))
                 .foregroundStyle(Color.tx3)

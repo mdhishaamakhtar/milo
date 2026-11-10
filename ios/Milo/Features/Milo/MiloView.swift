@@ -19,7 +19,7 @@ struct MiloView: View {
         NavigationStack(path: $path) {
             Group {
                 if let session, !session.isEmpty {
-                    Conversation(session: session, openWorkout: { path.append(WorkoutRoute(id: $0)) },
+                    Conversation(session: session, openRunning: { dismiss() }, openWorkout: { path.append(WorkoutRoute(id: $0)) },
                                  openExercise: { path.append(ExerciseRoute(id: $0)) },
                                  editTemplate: { id in editingTemplate = try? app.db.writer.read { try Template.fetchOne($0, key: id) } })
                 } else {
@@ -86,6 +86,7 @@ struct MiloView: View {
 struct Conversation: View {
     let session: MiloSession
     var onAdded: (() -> Void)?
+    var openRunning: (() -> Void)?
     var openWorkout: ((UUID) -> Void)?
     var openExercise: ((UUID) -> Void)?
     var editTemplate: ((UUID) -> Void)?
@@ -136,7 +137,7 @@ struct Conversation: View {
                     .font(.sofia(13.5, .medium)).foregroundStyle(Color.tx3).padding(.horizontal, 4)
             }
         case .card(let card):
-            CardView(card: card, session: session, onAdded: onAdded, openWorkout: openWorkout, openExercise: openExercise, editTemplate: editTemplate)
+            CardView(card: card, session: session, onAdded: onAdded, openRunning: openRunning, openWorkout: openWorkout, openExercise: openExercise, editTemplate: editTemplate)
         case .problem(_, let text):
             Label(text, systemImage: "exclamationmark.circle")
                 .font(.sub).foregroundStyle(Color.tx2).padding(.horizontal, 4)

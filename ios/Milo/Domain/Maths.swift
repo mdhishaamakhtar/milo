@@ -15,6 +15,12 @@ nonisolated enum MeasurementKind: String, Codable, CaseIterable, Sendable {
     case distance
 }
 
+/// What kind of set it was. A warm-up is logged but not counted: it adds nothing
+/// to volume and is never a top set or a best. The others are working sets.
+nonisolated enum SetKind: String, Codable, CaseIterable, Sendable {
+    case normal, warmup, drop, failure
+}
+
 nonisolated enum Maths {
     static let kgPerLb = 0.45359237
     static let defaultMET = 5.0
@@ -46,15 +52,33 @@ nonisolated enum Maths {
         var reps: Int
         var perSide: Bool
         var done: Bool
+        var kind: SetKind
+
+        /// Done, and not a warm-up.
+        var isWorking: Bool { done && kind != .warmup }
 
         enum CodingKeys: String, CodingKey {
-            case measurement, weight, unit, reps, done
+            case measurement, weight, unit, reps, done, kind
             case perSide = "per_side"
+        }
+
+        init(measurement: MeasurementKind, weight: String, unit: WeightUnit, reps: Int, perSide: Bool, done: Bool, kind: SetKind = .normal) {
+            (self.measurement, self.weight, self.unit, self.reps, self.perSide, self.done, self.kind) = (measurement, weight, unit, reps, perSide, done, kind)
+        }
+
+        /// The shared test vectors leave `kind` out for an ordinary set.
+        init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(
+                measurement: try c.decode(MeasurementKind.self, forKey: .measurement), weight: try c.decode(String.self, forKey: .weight),
+                unit: try c.decode(WeightUnit.self, forKey: .unit), reps: try c.decode(Int.self, forKey: .reps),
+                perSide: try c.decode(Bool.self, forKey: .perSide), done: try c.decode(Bool.self, forKey: .done),
+                kind: try c.decodeIfPresent(SetKind.self, forKey: .kind) ?? .normal)
         }
     }
 
     static func setVolumeKg(_ s: SetInput) -> Double {
-        guard s.done, s.measurement == .repsLoad, s.reps > 0, let kg = toKg(s.weight, s.unit) else { return 0 }
+        guard s.isWorking, s.measurement == .repsLoad, s.reps > 0, let kg = toKg(s.weight, s.unit) else { return 0 }
         return kg * Double(s.reps) * (s.perSide ? 2 : 1)
     }
 
@@ -94,7 +118,7 @@ nonisolated enum Maths {
 
     static func summarize(_ sets: [SetInput], bodyKg: Double) -> Summary {
         var s = Summary(volumeKg: volumeKg(sets))
-        for set in sets where set.done && set.reps > 0 {
+        for set in sets where set.isWorking && set.reps > 0 {
             guard let load = effectiveLoadKg(set.measurement, weight: set.weight, unit: set.unit, bodyKg: bodyKg) else { continue }
             if let top = s.topLoadKg, let reps = s.topReps {
                 if load > top || (load == top && set.reps > reps) {

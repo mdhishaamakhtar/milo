@@ -25,7 +25,7 @@ struct MainView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .fullScreenCover(isPresented: $app.showingWorkout) { WorkoutView() }
-        .sheet(isPresented: $app.showingMilo) { MiloView() }
+        .sheet(isPresented: $app.showingMilo, onDismiss: app.miloClosed) { MiloView() }
         .sheet(isPresented: $app.showingProfile) { ProfileView() }
     }
 }

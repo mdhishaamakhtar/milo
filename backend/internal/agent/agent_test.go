@@ -16,9 +16,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/mdhishaamakhtar/milo/backend/gen/milo"
-	"github.com/mdhishaamakhtar/milo/backend/internal/testkit"
 	"github.com/mdhishaamakhtar/milo/backend/internal/config"
 	"github.com/mdhishaamakhtar/milo/backend/internal/db/query"
+	"github.com/mdhishaamakhtar/milo/backend/internal/testkit"
 )
 
 // fakeModel plays back scripted replies and records every request.
@@ -81,7 +81,9 @@ func use(t *testing.T, name string, input any) func(anthropic.MessageNewParams) 
 }
 
 func fail() func(anthropic.MessageNewParams) (*anthropic.Message, error) {
-	return func(anthropic.MessageNewParams) (*anthropic.Message, error) { return nil, errors.New("connection reset") }
+	return func(anthropic.MessageNewParams) (*anthropic.Message, error) {
+		return nil, errors.New("connection reset")
+	}
 }
 
 // lastToolResult is the most recent tool_result the model was sent, as text.
@@ -213,7 +215,7 @@ func TestLogSetsCardAutoApplies(t *testing.T) {
 		t.Fatalf("got %d cards, want 1", len(ev.cards))
 	}
 	card := ev.cards[0]
-	if card.GetKind() != milo.CardKind_CARD_KIND_LOGGED || !card.GetAutoApply() || card.GetWorkoutId() != workoutID.String() {
+	if card.GetKind() != milo.CardKind_CARD_KIND_DONE || !card.GetAutoApply() || card.GetWorkoutId() != workoutID.String() {
 		t.Fatalf("card = %v", card)
 	}
 	var we, sets int
@@ -322,10 +324,10 @@ func TestProposeChangeCarriesBaseVersions(t *testing.T) {
 	model.then(
 		use(t, "propose_change", map[string]any{
 			"title": "Single Arm Landmine Press",
-			"edits": []map[string]any{
-				{"op": "update_set", "set_id": setIDs[3].String(), "weight": "25"},
-				{"op": "update_set", "set_id": setIDs[4].String(), "weight": "25"},
-				{"op": "delete_set", "set_id": setIDs[5].String()},
+			"sets": []map[string]any{
+				{"op": "update", "set_id": setIDs[3].String(), "weight": "25"},
+				{"op": "update", "set_id": setIDs[4].String(), "weight": "25"},
+				{"op": "delete", "set_id": setIDs[5].String()},
 			},
 		}),
 		say(t, "Here is exactly what would change."),
@@ -365,7 +367,7 @@ func TestCardOutcomeReachesNextTurn(t *testing.T) {
 	_, setIDs := shoulders(t, env, ctx)
 
 	model.then(
-		use(t, "propose_change", map[string]any{"title": "Landmine press", "edits": []map[string]any{{"op": "delete_set", "set_id": setIDs[5].String()}}}),
+		use(t, "propose_change", map[string]any{"title": "Landmine press", "sets": []map[string]any{{"op": "delete", "set_id": setIDs[5].String()}}}),
 		say(t, "Here's the change."),
 	)
 	ev := send(t, env, ctx, "", "drop the sixth set", nil)
@@ -393,7 +395,7 @@ func TestCardOutcomeReachesNextTurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if list.GetConversations()[0].GetSummary() != "Changed Landmine press" {
+	if list.GetConversations()[0].GetSummary() != "Landmine press updated" {
 		t.Fatalf("summary = %q", list.GetConversations()[0].GetSummary())
 	}
 }
@@ -494,7 +496,7 @@ func TestReadToolsScopeToUser(t *testing.T) {
 
 	model.then(
 		use(t, "get_workouts", map[string]any{"workout_ids": []string{workoutID.String()}}),
-		use(t, "propose_change", map[string]any{"title": "x", "edits": []map[string]any{{"op": "delete_set", "set_id": setIDs[0].String()}}}),
+		use(t, "propose_change", map[string]any{"title": "x", "sets": []map[string]any{{"op": "delete", "set_id": setIDs[0].String()}}}),
 		say(t, "Nothing there."),
 	)
 	ev := send(t, env, bob, "", "show me that workout", nil)

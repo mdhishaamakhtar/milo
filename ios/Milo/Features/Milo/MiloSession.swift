@@ -124,13 +124,16 @@ final class MiloSession {
     @discardableResult
     func apply(_ card: Milo_Card) -> Bool {
         do {
-            undoTokens[card.id] = try ChangeApplier(db: app.db).apply(card.changes, base: card.base)
+            let token = try app.following(card) { try ChangeApplier(db: app.db).apply(card.changes, base: card.base) }
+            undoTokens[card.id] = token
             cardStates[card.id] = .applied
-            if let we = card.changes.first(where: { $0.workoutExercise.id.isEmpty == false }) {
+            if let we = card.changes.first(where: { !$0.workoutExercise.id.isEmpty }) {
                 addedWorkoutExercise = UUID(protoID: we.workoutExercise.id)
             }
+            if token.created.contains(where: { ($0 as? Workout).map { $0.endedAt == nil } ?? false }) {
+                app.workoutStartedByMilo = true
+            }
             report(card, .applied)
-            app.edited()
             return true
         } catch ChangeApplier.ApplyError.stale {
             cardStates[card.id] = .stale
@@ -144,11 +147,11 @@ final class MiloSession {
     func undo(_ card: Milo_Card) {
         guard let token = undoTokens[card.id] else { return }
         do {
-            try ChangeApplier(db: app.db).undo(token)
+            try app.following(card) { try ChangeApplier(db: app.db).undo(token) }
             undoTokens[card.id] = nil
             cardStates[card.id] = .undone
+            if token.created.contains(where: { $0 is Workout }) { app.workoutStartedByMilo = false }
             report(card, .undone)
-            app.edited()
         } catch {
             log.error("undo card: \(error.localizedDescription)")
         }

@@ -27,10 +27,11 @@ public nonisolated enum Milo_CardKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// A movement Milo worked out, with sets to add. Add to workout / Edit.
   case newExercise // = 1
 
-  /// Sets for a known exercise. Applied on arrival, with Undo.
-  case logged // = 2
+  /// Something Milo did because it was asked to: sets logged, a workout started.
+  /// Applied on arrival and shown as one line with Undo.
+  case done // = 2
 
-  /// Before/after edit of existing rows. Apply change / Not now.
+  /// A before/after edit, or a delete, of existing rows. Apply / Not now.
   case change // = 3
 
   /// A template drafted in conversation. Save template / Edit list.
@@ -51,7 +52,7 @@ public nonisolated enum Milo_CardKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     switch rawValue {
     case 0: self = .unspecified
     case 1: self = .newExercise
-    case 2: self = .logged
+    case 2: self = .done
     case 3: self = .change
     case 4: self = .templateDraft
     case 5: self = .chart
@@ -64,7 +65,7 @@ public nonisolated enum Milo_CardKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     switch self {
     case .unspecified: return 0
     case .newExercise: return 1
-    case .logged: return 2
+    case .done: return 2
     case .change: return 3
     case .templateDraft: return 4
     case .chart: return 5
@@ -77,7 +78,7 @@ public nonisolated enum Milo_CardKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   public static let allCases: [Milo_CardKind] = [
     .unspecified,
     .newExercise,
-    .logged,
+    .done,
     .change,
     .templateDraft,
     .chart,
@@ -346,7 +347,7 @@ public nonisolated struct Milo_Card: @unchecked Sendable {
   /// Clears the value of `chart`. Subsequent reads from it will return its default value.
   public mutating func clearChart() {_uniqueStorage()._chart = nil}
 
-  /// Apply without a tap (sets for known exercises).
+  /// Apply without a tap.
   public var autoApply: Bool {
     get {_storage._autoApply}
     set {_uniqueStorage()._autoApply = newValue}
@@ -371,6 +372,24 @@ public nonisolated struct Milo_Card: @unchecked Sendable {
   public var status: Milo_CardStatus {
     get {_storage._status}
     set {_uniqueStorage()._status = newValue}
+  }
+
+  /// The apply button, when "Apply change" doesn't say it: "Delete workout".
+  public var applyLabel: String {
+    get {_storage._applyLabel}
+    set {_uniqueStorage()._applyLabel = newValue}
+  }
+
+  /// Applying removes something; the button is red.
+  public var destructive: Bool {
+    get {_storage._destructive}
+    set {_uniqueStorage()._destructive = newValue}
+  }
+
+  /// What the card says once applied: "Deleted Push Day".
+  public var appliedTitle: String {
+    get {_storage._appliedTitle}
+    set {_uniqueStorage()._appliedTitle = newValue}
   }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -403,7 +422,7 @@ public nonisolated struct Milo_Chart: Sendable {
 
   public var title: String = String()
 
-  /// "top_set", "volume" or "e1rm".
+  /// "top_set", "volume", "e1rm" or "body_weight".
   public var metric: String = String()
 
   public var unit: Milo_WeightUnit = .unspecified
@@ -623,7 +642,7 @@ public nonisolated struct Milo_SetCardStatusResponse: Sendable {
 fileprivate nonisolated let _protobuf_package = "milo"
 
 nonisolated extension Milo_CardKind: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CARD_KIND_UNSPECIFIED\0\u{1}CARD_KIND_NEW_EXERCISE\0\u{1}CARD_KIND_LOGGED\0\u{1}CARD_KIND_CHANGE\0\u{1}CARD_KIND_TEMPLATE_DRAFT\0\u{1}CARD_KIND_CHART\0\u{1}CARD_KIND_WORKOUT\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CARD_KIND_UNSPECIFIED\0\u{1}CARD_KIND_NEW_EXERCISE\0\u{1}CARD_KIND_DONE\0\u{1}CARD_KIND_CHANGE\0\u{1}CARD_KIND_TEMPLATE_DRAFT\0\u{1}CARD_KIND_CHART\0\u{1}CARD_KIND_WORKOUT\0")
 }
 
 nonisolated extension Milo_CardStatus: SwiftProtobuf._ProtoNameProviding {
@@ -969,7 +988,7 @@ nonisolated extension Milo_MiloError: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
 nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Card"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}kind\0\u{1}title\0\u{1}subtitle\0\u{1}lines\0\u{1}changes\0\u{1}base\0\u{1}chart\0\u{3}auto_apply\0\u{3}workout_id\0\u{3}exercise_id\0\u{1}note\0\u{1}status\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}kind\0\u{1}title\0\u{1}subtitle\0\u{1}lines\0\u{1}changes\0\u{1}base\0\u{1}chart\0\u{3}auto_apply\0\u{3}workout_id\0\u{3}exercise_id\0\u{1}note\0\u{1}status\0\u{3}apply_label\0\u{1}destructive\0\u{3}applied_title\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -985,6 +1004,9 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     var _exerciseID: String = String()
     var _note: String = String()
     var _status: Milo_CardStatus = .unspecified
+    var _applyLabel: String = String()
+    var _destructive: Bool = false
+    var _appliedTitle: String = String()
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -1008,6 +1030,9 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       _exerciseID = source._exerciseID
       _note = source._note
       _status = source._status
+      _applyLabel = source._applyLabel
+      _destructive = source._destructive
+      _appliedTitle = source._appliedTitle
     }
   }
 
@@ -1039,6 +1064,9 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
         case 11: try { try decoder.decodeSingularStringField(value: &_storage._exerciseID) }()
         case 12: try { try decoder.decodeSingularStringField(value: &_storage._note) }()
         case 13: try { try decoder.decodeSingularEnumField(value: &_storage._status) }()
+        case 14: try { try decoder.decodeSingularStringField(value: &_storage._applyLabel) }()
+        case 15: try { try decoder.decodeSingularBoolField(value: &_storage._destructive) }()
+        case 16: try { try decoder.decodeSingularStringField(value: &_storage._appliedTitle) }()
         default: break
         }
       }
@@ -1090,6 +1118,15 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       if _storage._status != .unspecified {
         try visitor.visitSingularEnumField(value: _storage._status, fieldNumber: 13)
       }
+      if !_storage._applyLabel.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._applyLabel, fieldNumber: 14)
+      }
+      if _storage._destructive != false {
+        try visitor.visitSingularBoolField(value: _storage._destructive, fieldNumber: 15)
+      }
+      if !_storage._appliedTitle.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._appliedTitle, fieldNumber: 16)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1112,6 +1149,9 @@ nonisolated extension Milo_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
         if _storage._exerciseID != rhs_storage._exerciseID {return false}
         if _storage._note != rhs_storage._note {return false}
         if _storage._status != rhs_storage._status {return false}
+        if _storage._applyLabel != rhs_storage._applyLabel {return false}
+        if _storage._destructive != rhs_storage._destructive {return false}
+        if _storage._appliedTitle != rhs_storage._appliedTitle {return false}
         return true
       }
       if !storagesAreEqual {return false}

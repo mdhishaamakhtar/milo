@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import MiloAPI
 import Observation
 import OSLog
 
@@ -18,6 +19,8 @@ final class AppModel {
     var showingWorkout = false
     var showingMilo = false
     var showingProfile = false
+    /// Milo started a workout: it opens once Milo's sheet is out of the way.
+    var workoutStartedByMilo = false
     /// What Milo is told about where the user is when they ask.
     var miloContext = MiloContext.today
 
@@ -63,6 +66,43 @@ extension AppModel {
         } catch {
             log.error("delete workout: \(error.localizedDescription)")
         }
+    }
+}
+
+extension AppModel {
+    /// Runs a change to rows Milo proposed (applying a card, or undoing it), then does
+    /// what the app's own buttons do around such a change: Apple Health hears about
+    /// workouts that finished, changed or went, and the change is synced.
+    func following<T>(_ card: Milo_Card, _ change: () throws -> T) throws -> T {
+        let ids = card.workoutIDs
+        let before = try workouts(ids)
+        let result = try change()
+        let after = try workouts(ids)
+        Task { [health] in
+            for id in ids { await health.follow(before: before[id], after: after[id]) }
+        }
+        edited()
+        return result
+    }
+
+    private func workouts(_ ids: Set<UUID>) throws -> [UUID: Workout] {
+        try db.writer.read { db in
+            Dictionary(uniqueKeysWithValues: try Workout.fetchAll(db, keys: Array(ids)).map { ($0.id, $0) })
+        }
+    }
+
+    /// Opens the workout Milo started, once its sheet has closed.
+    func miloClosed() {
+        guard workoutStartedByMilo else { return }
+        workoutStartedByMilo = false
+        showingWorkout = (try? db.writer.read { try db.runningWorkout($0) }) != nil
+    }
+}
+
+private extension Milo_Card {
+    /// The workouts a card touches: the one it names, and any whose row it writes.
+    var workoutIDs: Set<UUID> {
+        Set(([workoutID] + changes.map(\.workout.id)).compactMap { UUID(protoID: $0) })
     }
 }
 

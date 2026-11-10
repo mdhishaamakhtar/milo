@@ -196,21 +196,6 @@ func (s *Service) GetConversation(ctx context.Context, req *milo.GetConversation
 	return &milo.GetConversationResponse{Conversation: conversationProto(conv), Items: items}, nil
 }
 
-// summaryFor is what an applied card says in the conversation list.
-func summaryFor(card *milo.Card) string {
-	switch card.GetKind() {
-	case milo.CardKind_CARD_KIND_NEW_EXERCISE:
-		return "Added " + card.GetTitle() + " as a new exercise"
-	case milo.CardKind_CARD_KIND_TEMPLATE_DRAFT:
-		return "Saved the " + card.GetTitle() + " template"
-	case milo.CardKind_CARD_KIND_LOGGED:
-		return card.GetTitle()
-	case milo.CardKind_CARD_KIND_CHANGE:
-		return "Changed " + card.GetTitle()
-	}
-	return ""
-}
-
 func (s *Service) SetCardStatus(ctx context.Context, req *milo.SetCardStatusRequest) (*milo.SetCardStatusResponse, error) {
 	cardID, err := uuid.Parse(req.GetCardId())
 	if err != nil {
@@ -230,9 +215,8 @@ func (s *Service) SetCardStatus(ctx context.Context, req *milo.SetCardStatusRequ
 	if status == "applied" {
 		var card milo.Card
 		if protojson.Unmarshal(row.Payload, &card) == nil {
-			if sum := summaryFor(&card); sum != "" {
-				_ = s.q.SetConversationSummary(ctx, query.SetConversationSummaryParams{ID: row.ConversationID, Summary: sum})
-			}
+			// What came of the conversation, for the list of earlier ones.
+			_ = s.q.SetConversationSummary(ctx, query.SetConversationSummaryParams{ID: row.ConversationID, Summary: card.GetAppliedTitle()})
 		}
 	}
 	return &milo.SetCardStatusResponse{}, nil

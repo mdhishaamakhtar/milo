@@ -93,7 +93,7 @@ func distanceText(m float64) string {
 }
 
 func setTextRow(measurement string, s query.Set) string {
-	return setText(measurement, s.Weight, s.WeightUnit, s.Reps, s.PerSide, s.DurationS, s.DistanceM)
+	return kindPrefix(s.Kind) + setText(measurement, s.Weight, s.WeightUnit, s.Reps, s.PerSide, s.DurationS, s.DistanceM)
 }
 
 // exerciseSummary is the short line for an exercise in a workout: "6 × 15 at 20 kg", "3 × 45 s", "7 sets, top 22.7 kg".
@@ -149,7 +149,7 @@ func setInputs(measurement string, sets []query.Set) []maths.SetInput {
 		if s.Reps != nil {
 			r = int(*s.Reps)
 		}
-		out = append(out, maths.SetInput{Measurement: measurement, Weight: s.Weight, Unit: s.WeightUnit, Reps: r, PerSide: s.PerSide, Done: s.Done})
+		out = append(out, maths.SetInput{Measurement: measurement, Weight: s.Weight, Unit: s.WeightUnit, Reps: r, PerSide: s.PerSide, Done: s.Done, Kind: s.Kind})
 	}
 	return out
 }
@@ -203,4 +203,63 @@ func truncate(s string, n int) string {
 		return string(r)
 	}
 	return strings.TrimSpace(string(r[:n-1])) + "…"
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "None"
+	}
+	return s
+}
+
+func yesNo(b bool) string {
+	if b {
+		return "Yes"
+	}
+	return "No"
+}
+
+func supersetText(groupLabel string) string {
+	if groupLabel == "" {
+		return "On its own"
+	}
+	return "In a superset"
+}
+
+// ordinal is "1st", "2nd", "3rd", "4th".
+func ordinal(n int) string {
+	suffix := "th"
+	if n%100 < 11 || n%100 > 13 {
+		switch n % 10 {
+		case 1:
+			suffix = "st"
+		case 2:
+			suffix = "nd"
+		case 3:
+			suffix = "rd"
+		}
+	}
+	return fmt.Sprintf("%d%s", n, suffix)
+}
+
+// supersetLabels numbers a list of exercises, lettering neighbours that share a
+// group: ["", "", "g", "g"] is 1, 2, 3a, 3b. The phone numbers them the same way.
+func supersetLabels(groups []string) []string {
+	out := make([]string, 0, len(groups))
+	number := 0
+	for i := 0; i < len(groups); {
+		j := i + 1
+		for groups[i] != "" && j < len(groups) && groups[j] == groups[i] {
+			j++
+		}
+		number++
+		if j-i == 1 {
+			out = append(out, strconv.Itoa(number))
+		}
+		for k := 0; j-i > 1 && k < j-i; k++ {
+			out = append(out, fmt.Sprintf("%d%c", number, 'a'+k))
+		}
+		i = j
+	}
+	return out
 }

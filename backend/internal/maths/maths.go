@@ -60,6 +60,11 @@ func FormatTenths(v float64) string {
 	return strings.TrimSuffix(s, ".0")
 }
 
+// Warmup is the set kind that is logged but not counted: a warm-up adds nothing
+// to volume and is never a top set or a best. Drop sets and sets to failure
+// are working sets like any other.
+const Warmup = "warmup"
+
 // SetInput is one set as the maths needs it.
 type SetInput struct {
 	Measurement string `json:"measurement"`
@@ -68,11 +73,26 @@ type SetInput struct {
 	Reps        int    `json:"reps"`
 	PerSide     bool   `json:"per_side"`
 	Done        bool   `json:"done"`
+	Kind        string `json:"kind"` // "" is an ordinary set
 }
 
-// SetVolumeKg is weight × reps (× 2 for per-side sets) for a done reps-and-load set; 0 otherwise.
+// Working reports whether a set counts: done, and not a warm-up.
+func (s SetInput) Working() bool { return s.Done && s.Kind != Warmup }
+
+// WorkingSets counts the sets that count.
+func WorkingSets(sets []SetInput) int {
+	n := 0
+	for _, s := range sets {
+		if s.Working() {
+			n++
+		}
+	}
+	return n
+}
+
+// SetVolumeKg is weight × reps (× 2 for per-side sets) for a working reps-and-load set; 0 otherwise.
 func SetVolumeKg(s SetInput) float64 {
-	if !s.Done || s.Measurement != RepsLoad || s.Reps <= 0 {
+	if !s.Working() || s.Measurement != RepsLoad || s.Reps <= 0 {
 		return 0
 	}
 	kg, ok := ToKg(s.Weight, s.Unit)
@@ -138,11 +158,11 @@ type Summary struct {
 	HasE1RM   bool
 }
 
-// Summarize computes a session's numbers for one exercise from its done sets.
+// Summarize computes a session's numbers for one exercise from its working sets.
 func Summarize(sets []SetInput, bodyKg float64) Summary {
 	sum := Summary{VolumeKg: VolumeKg(sets)}
 	for _, s := range sets {
-		if !s.Done || s.Reps <= 0 {
+		if !s.Working() || s.Reps <= 0 {
 			continue
 		}
 		load, ok := EffectiveLoadKg(s.Measurement, s.Weight, s.Unit, bodyKg)

@@ -249,6 +249,10 @@ struct SupersetLabelTests {
         #expect(Superset.labels(["g", "", "g"]) == ["1", "2", "3"])
         #expect(Superset.labels([]) == [])
     }
+
+    @Test func onlyOrdinarySetsTakeANumber() {
+        #expect(SetMark.marks([.warmup, .normal, .normal, .drop, .normal, .failure]).map(\.text) == ["W", "1", "2", "D", "3", "F"])
+    }
 }
 
 struct ExportTests {

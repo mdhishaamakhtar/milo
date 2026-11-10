@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,91 +17,105 @@ import (
 	"github.com/mdhishaamakhtar/milo/backend/internal/rows"
 )
 
+// propose_change: edits to workouts already in the log, shown as one
+// before/after card. Nothing changes until the user applies it.
+
 type changeInput struct {
-	Title    string      `json:"title" jsonschema_description:"Card title, e.g. the exercise or workout name."`
-	Subtitle string      `json:"subtitle,omitempty" jsonschema_description:"e.g. \"Shoulders, Tue 6 Oct\"."`
-	Edits    []editInput `json:"edits"`
+	Title     string         `json:"title" jsonschema_description:"What is being changed, e.g. the exercise or workout name."`
+	Subtitle  string         `json:"subtitle,omitempty" jsonschema_description:"e.g. \"Shoulders, Tue 6 Oct\". Defaults to the workout and its date."`
+	Sets      []setEdit      `json:"sets,omitempty" jsonschema_description:"Edits to single sets."`
+	Exercises []exerciseEdit `json:"exercises,omitempty" jsonschema_description:"Edits to an exercise inside a workout: remove it, swap it for another, move it, note it, superset it."`
+	Workouts  []workoutEdit  `json:"workouts,omitempty" jsonschema_description:"Edits to a workout itself: its name, note, start or end time."`
 }
 
-type editInput struct {
-	Op                string   `json:"op" jsonschema:"enum=update_set,enum=delete_set,enum=add_set,enum=rename_workout,enum=update_exercise"`
-	SetID             string   `json:"set_id,omitempty"`
-	WorkoutExerciseID string   `json:"workout_exercise_id,omitempty" jsonschema_description:"For add_set."`
-	WorkoutID         string   `json:"workout_id,omitempty" jsonschema_description:"For rename_workout."`
-	ExerciseID        string   `json:"exercise_id,omitempty" jsonschema_description:"For update_exercise."`
+type setEdit struct {
+	Op                string   `json:"op" jsonschema:"enum=update,enum=delete,enum=add"`
+	SetID             string   `json:"set_id,omitempty" jsonschema_description:"For update and delete."`
+	WorkoutExerciseID string   `json:"workout_exercise_id,omitempty" jsonschema_description:"For add: the exercise in the workout that gets the set."`
 	Reps              *int32   `json:"reps,omitempty"`
-	Weight            *string  `json:"weight,omitempty"`
+	Weight            *string  `json:"weight,omitempty" jsonschema_description:"Exact weight, e.g. \"22.5\"; \"\" for none."`
 	Unit              string   `json:"unit,omitempty" jsonschema:"enum=kg,enum=lb"`
 	PerSide           *bool    `json:"per_side,omitempty"`
 	DurationS         *int32   `json:"duration_s,omitempty"`
 	DistanceM         *float64 `json:"distance_m,omitempty"`
 	Done              *bool    `json:"done,omitempty"`
-	Name              string   `json:"name,omitempty" jsonschema_description:"New name, for rename_workout or update_exercise."`
-	Measurement       string   `json:"measurement,omitempty" jsonschema:"enum=reps_load,enum=bodyweight,enum=assisted,enum=timed,enum=distance"`
-	Unilateral        *bool    `json:"unilateral,omitempty"`
-	Equipment         string   `json:"equipment,omitempty"`
-	PrimaryMuscles    []string `json:"primary_muscles,omitempty"`
-	MET               *float64 `json:"met,omitempty"`
-	Confirm           bool     `json:"confirm,omitempty" jsonschema_description:"For update_exercise: the user confirmed it, so it is no longer Approximate."`
+	Kind              string   `json:"kind,omitempty" jsonschema:"enum=normal,enum=warmup,enum=drop,enum=failure"`
 }
 
-// changeCard collects one card's edits: the rows to write, the versions they
-// were based on, and the before/after lines.
+type exerciseEdit struct {
+	Op                string  `json:"op" jsonschema:"enum=update,enum=remove"`
+	WorkoutExerciseID string  `json:"workout_exercise_id"`
+	ExerciseID        string  `json:"exercise_id,omitempty" jsonschema_description:"Swap it for this exercise, keeping its sets (it was logged under the wrong one)."`
+	Position          *int32  `json:"position,omitempty" jsonschema_description:"Move it to this place in the workout, counting from 1."`
+	Notes             *string `json:"notes,omitempty" jsonschema_description:"The note on this exercise in this workout; \"\" clears it."`
+	GroupLabel        *string `json:"group_label,omitempty" jsonschema_description:"Supersets: neighbouring exercises with the same label are done back to back. \"\" takes it out of its superset."`
+}
+
+type workoutEdit struct {
+	WorkoutID string  `json:"workout_id"`
+	Name      string  `json:"name,omitempty"`
+	Notes     *string `json:"notes,omitempty" jsonschema_description:"\"\" clears the note."`
+	StartedAt string  `json:"started_at,omitempty" jsonschema_description:"Local time, YYYY-MM-DDTHH:MM."`
+	EndedAt   string  `json:"ended_at,omitempty" jsonschema_description:"Local time, YYYY-MM-DDTHH:MM."`
+}
+
+// changeCard collects one card's edits. Each row is loaded once and edited in
+// place, so several edits to the same row add up; the changes are read off at the end.
 type changeCard struct {
 	t         *turn
-	changes   []*milo.Change
 	base      []*milo.RowVersion
 	lines     []*milo.CardLine
-	exercises map[uuid.UUID]*setEdits // by workout exercise, in the order touched
-	order     []uuid.UUID
-	workoutID uuid.UUID // the first workout touched, for the subtitle
+	workouts  []*milo.Workout
+	exercises []*exerciseEdits // in the order touched
+	workoutID uuid.UUID        // the first workout touched, for the subtitle
 }
 
-// setEdits is one exercise's sets before and after the card.
-type setEdits struct {
+// exerciseEdits is one exercise in a workout, and its sets, before and after the card.
+type exerciseEdits struct {
+	we          *milo.WorkoutExercise
+	name        string
 	measurement string
+	edited      bool // the exercise row itself changed
 	before      []query.Set
 	after       map[uuid.UUID]*query.Set // nil = removed
 	added       []query.Set
 }
 
 func (t *turn) proposeChange(ctx context.Context, in changeInput) (any, error) {
-	if len(in.Edits) == 0 {
-		return nil, badInput("edits can't be empty")
-	}
-	c := &changeCard{t: t, exercises: map[uuid.UUID]*setEdits{}}
-	for _, e := range in.Edits {
-		var err error
-		switch e.Op {
-		case "update_set", "delete_set":
-			err = c.editSet(ctx, e)
-		case "add_set":
-			err = c.addSet(ctx, e)
-		case "rename_workout":
-			err = c.renameWorkout(ctx, e)
-		case "update_exercise":
-			err = c.updateExercise(ctx, e)
-		default:
-			err = badInput("unknown op %q", e.Op)
-		}
-		if err != nil {
+	c := &changeCard{t: t}
+	for _, e := range in.Workouts {
+		if err := c.editWorkout(ctx, e); err != nil {
 			return nil, err
 		}
 	}
-	if len(c.changes) == 0 {
+	for _, e := range in.Exercises {
+		if err := c.editExercise(ctx, e); err != nil {
+			return nil, err
+		}
+	}
+	for _, e := range in.Sets {
+		if err := c.editSet(ctx, e); err != nil {
+			return nil, err
+		}
+	}
+	changes := c.changes()
+	if len(changes) == 0 {
 		return nil, badInput("these edits change nothing")
 	}
-	for _, weID := range c.order {
-		c.lines = append(c.lines, c.setLines(c.exercises[weID])...)
+	for _, e := range c.exercises {
+		c.lines = append(c.lines, c.setLines(e)...)
 	}
 
 	subtitle := in.Subtitle
 	if subtitle == "" && c.workoutID != uuid.Nil {
-		if w, err := t.s.q.GetUserWorkout(ctx, query.GetUserWorkoutParams{ID: c.workoutID, UserID: t.userID}); err == nil {
+		if w, err := t.userWorkout(ctx, c.workoutID); err == nil {
 			subtitle = nameOr(w.Name, "Workout") + ", " + t.day(w.StartedAt)
 		}
 	}
-	card := &milo.Card{Kind: milo.CardKind_CARD_KIND_CHANGE, Title: in.Title, Subtitle: subtitle, Lines: c.lines, Changes: c.changes, Base: c.base}
+	card := &milo.Card{
+		Kind: milo.CardKind_CARD_KIND_CHANGE, Title: in.Title, Subtitle: subtitle, Lines: c.lines,
+		Changes: changes, Base: c.base, AppliedTitle: in.Title + " updated",
+	}
 	if c.workoutID != uuid.Nil {
 		card.WorkoutId = c.workoutID.String()
 	}
@@ -107,18 +123,130 @@ func (t *turn) proposeChange(ctx context.Context, in changeInput) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"card_id": id, "shown": "The user sees the before/after card. Nothing changes until they tap Apply."}, nil
+	return map[string]any{"card_id": id, "shown": proposedNote}, nil
 }
 
-// sets loads a workout exercise's sets the first time an edit touches it.
-func (c *changeCard) sets(ctx context.Context, weID uuid.UUID) (*setEdits, error) {
-	if e, ok := c.exercises[weID]; ok {
-		return e, nil
+// proposedNote is what Milo is told after a card that waits for a tap.
+const proposedNote = "The user sees the card. Nothing changes until they tap the button on it."
+
+func (c *changeCard) line(label, before, after string) {
+	c.lines = append(c.lines, &milo.CardLine{Label: label, Before: before, After: after})
+}
+
+func (c *changeCard) touch(workoutID uuid.UUID) {
+	if c.workoutID == uuid.Nil {
+		c.workoutID = workoutID
 	}
-	we, err := c.t.s.q.GetUserWorkoutExercise(ctx, query.GetUserWorkoutExerciseParams{ID: weID, UserID: c.t.userID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, badInput("no workout exercise %s in this user's log", weID)
+}
+
+// changes reads the edited rows off the card: workouts, then exercises, then
+// sets. It also notes the version of each exercise row it rewrites.
+func (c *changeCard) changes() []*milo.Change {
+	now := ts(c.t.now)
+	var out []*milo.Change
+	for _, w := range c.workouts {
+		w.UpdatedAt = now
+		out = append(out, rows.Change(w))
 	}
+	for _, e := range c.exercises {
+		if e.edited {
+			c.base = append(c.base, &milo.RowVersion{Table: "workout_exercise", Id: e.we.GetId(), UpdatedAt: e.we.GetUpdatedAt()})
+			e.we.UpdatedAt = now
+			out = append(out, rows.Change(e.we))
+		}
+	}
+	for _, e := range c.exercises {
+		for _, s := range e.before {
+			edited, touched := e.after[s.ID]
+			if !touched && !e.we.GetDeleted() {
+				continue
+			}
+			row := rows.Set(s)
+			if edited != nil {
+				row = rows.Set(*edited)
+			}
+			row.Deleted = edited == nil || e.we.GetDeleted()
+			row.UpdatedAt = now
+			out = append(out, rows.Change(row))
+		}
+		for _, s := range e.added {
+			row := rows.Set(s)
+			row.UpdatedAt = now
+			out = append(out, rows.Change(row))
+		}
+	}
+	return out
+}
+
+// MARK: Workouts
+
+func (c *changeCard) editWorkout(ctx context.Context, in workoutEdit) error {
+	id, err := parseUUID(in.WorkoutID, "workout_id")
+	if err != nil {
+		return err
+	}
+	stored, err := c.t.userWorkout(ctx, id)
+	if err != nil {
+		return err
+	}
+	w := rows.Workout(stored)
+	before := len(c.lines)
+	if name := strings.TrimSpace(in.Name); name != "" && name != w.Name {
+		c.line("Workout name", w.Name, name)
+		w.Name = name
+	}
+	if in.Notes != nil && strings.TrimSpace(*in.Notes) != w.Notes {
+		c.line("Note", orNone(w.Notes), orNone(strings.TrimSpace(*in.Notes)))
+		w.Notes = strings.TrimSpace(*in.Notes)
+	}
+	if in.StartedAt != "" {
+		at, err := c.t.parseLocal(in.StartedAt, "started_at")
+		if err != nil {
+			return err
+		}
+		if !at.Equal(stored.StartedAt) {
+			c.line("Started", c.t.clock(stored.StartedAt), c.t.clock(at))
+			w.StartedAt = ts(at)
+		}
+	}
+	if in.EndedAt != "" {
+		if stored.EndedAt == nil {
+			return badInput("%q is still running; finish_workout ends it", nameOr(stored.Name, "That workout"))
+		}
+		at, err := c.t.parseLocal(in.EndedAt, "ended_at")
+		if err != nil {
+			return err
+		}
+		if !at.Equal(*stored.EndedAt) {
+			c.line("Ended", c.t.clock(*stored.EndedAt), c.t.clock(at))
+			w.EndedAt = ts(at)
+		}
+	}
+	if w.EndedAt != nil && !w.EndedAt.AsTime().After(w.StartedAt.AsTime()) {
+		return badInput("the workout would end before it starts (%s to %s)", c.t.clock(w.StartedAt.AsTime()), c.t.clock(w.EndedAt.AsTime()))
+	}
+	if w.StartedAt.AsTime().After(c.t.now.Add(time.Minute)) {
+		return badInput("a workout can't start in the future")
+	}
+	if len(c.lines) == before {
+		return nil
+	}
+	c.base = append(c.base, version("workout", stored.ID, stored.UpdatedAt))
+	c.workouts = append(c.workouts, w)
+	c.touch(stored.ID)
+	return nil
+}
+
+// MARK: Exercises in a workout
+
+// exercise loads a workout exercise and its sets the first time an edit touches it.
+func (c *changeCard) exercise(ctx context.Context, id string) (*exerciseEdits, error) {
+	for _, e := range c.exercises {
+		if e.we.GetId() == id {
+			return e, nil
+		}
+	}
+	we, err := c.t.userWorkoutExercise(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -126,78 +254,156 @@ func (c *changeCard) sets(ctx context.Context, weID uuid.UUID) (*setEdits, error
 	if err != nil {
 		return nil, err
 	}
-	sets, err := c.t.s.q.SetsFor(ctx, query.SetsForParams{UserID: c.t.userID, WeIds: []uuid.UUID{weID}})
+	sets, err := c.t.s.q.SetsFor(ctx, query.SetsForParams{UserID: c.t.userID, WeIds: []uuid.UUID{we.ID}})
 	if err != nil {
 		return nil, err
 	}
-	e := &setEdits{measurement: ex.Measurement, before: sets, after: map[uuid.UUID]*query.Set{}}
-	c.exercises[weID] = e
-	c.order = append(c.order, weID)
-	if c.workoutID == uuid.Nil {
-		c.workoutID = we.WorkoutID
-	}
+	e := &exerciseEdits{we: rows.WorkoutExercise(we), name: ex.Name, measurement: ex.Measurement, before: sets, after: map[uuid.UUID]*query.Set{}}
+	c.exercises = append(c.exercises, e)
+	c.touch(we.WorkoutID)
 	return e, nil
 }
 
-func (c *changeCard) editSet(ctx context.Context, in editInput) error {
+func (c *changeCard) editExercise(ctx context.Context, in exerciseEdit) error {
+	e, err := c.exercise(ctx, in.WorkoutExerciseID)
+	if err != nil {
+		return err
+	}
+	if in.Op == "remove" {
+		e.we.Deleted, e.edited = true, true
+		c.line(e.name, exerciseSummary(e.measurement, e.before), "Removed")
+		return nil
+	}
+	if in.Op != "update" {
+		return badInput("exercise op must be update or remove, not %q", in.Op)
+	}
+	if in.ExerciseID != "" && in.ExerciseID != e.we.GetExerciseId() {
+		to, err := c.t.exercise(ctx, in.ExerciseID)
+		if err != nil {
+			return err
+		}
+		if to.Measurement != e.measurement {
+			return badInput("%s is counted differently from %s, so the sets wouldn't carry over. Remove the exercise and log the sets under %s instead", to.Name, e.name, to.Name)
+		}
+		c.line("Exercise", e.name, to.Name)
+		e.we.ExerciseId, e.name, e.edited = to.ID.String(), to.Name, true
+	}
+	if in.Notes != nil && strings.TrimSpace(*in.Notes) != e.we.GetNotes() {
+		c.line("Note on "+shortName(e.name), orNone(e.we.GetNotes()), orNone(strings.TrimSpace(*in.Notes)))
+		e.we.Notes, e.edited = strings.TrimSpace(*in.Notes), true
+	}
+	if in.GroupLabel != nil && *in.GroupLabel != e.we.GetGroupLabel() {
+		c.line(e.name, supersetText(e.we.GetGroupLabel()), supersetText(*in.GroupLabel))
+		e.we.GroupLabel, e.edited = *in.GroupLabel, true
+	}
+	if in.Position != nil {
+		return c.move(ctx, e, int(*in.Position))
+	}
+	return nil
+}
+
+// move puts an exercise at a new place and renumbers the ones it passes.
+func (c *changeCard) move(ctx context.Context, e *exerciseEdits, to int) error {
+	workoutID := uuid.MustParse(e.we.GetWorkoutId())
+	wes, err := c.t.s.q.WorkoutExercisesFor(ctx, query.WorkoutExercisesForParams{UserID: c.t.userID, WorkoutIds: []uuid.UUID{workoutID}})
+	if err != nil {
+		return err
+	}
+	order := make([]string, len(wes))
+	for i, we := range wes {
+		order[i] = we.ID.String()
+	}
+	from := slices.Index(order, e.we.GetId())
+	if to < 1 || to > len(order) {
+		return badInput("position %d is outside the workout's %d exercises", to, len(order))
+	}
+	if from == to-1 {
+		return nil
+	}
+	order = slices.Insert(slices.Delete(order, from, from+1), to-1, e.we.GetId())
+	c.line(e.name, ordinal(from+1), ordinal(to))
+	for i, id := range order {
+		moved, err := c.exercise(ctx, id)
+		if err != nil {
+			return err
+		}
+		if moved.we.GetPosition() != int32(i+1) {
+			moved.we.Position, moved.edited = int32(i+1), true
+		}
+	}
+	return nil
+}
+
+// MARK: Sets
+
+func (c *changeCard) editSet(ctx context.Context, in setEdit) error {
+	if in.Kind != "" && rows.Parse[milo.SetKind](in.Kind) == milo.SetKind_SET_KIND_UNSPECIFIED {
+		return badInput("kind must be normal, warmup, drop or failure, not %q", in.Kind)
+	}
+	if in.Op == "add" {
+		e, err := c.exercise(ctx, in.WorkoutExerciseID)
+		if err != nil {
+			return err
+		}
+		s := query.Set{ID: newID(), WorkoutExerciseID: uuid.MustParse(e.we.GetId()), Position: 1, Kind: "normal", WeightUnit: "kg", Done: true}
+		if last, ok := e.last(); ok {
+			s.Position, s.WeightUnit, s.PerSide = last.Position+1, last.WeightUnit, last.PerSide
+		}
+		if err := in.apply(&s); err != nil {
+			return err
+		}
+		e.added = append(e.added, s)
+		return nil
+	}
+	if in.Op != "update" && in.Op != "delete" {
+		return badInput("set op must be update, delete or add, not %q", in.Op)
+	}
 	id, err := parseUUID(in.SetID, "set_id")
 	if err != nil {
 		return err
 	}
-	s, err := c.t.s.q.GetUserSet(ctx, query.GetUserSetParams{ID: id, UserID: c.t.userID})
+	stored, err := c.t.s.q.GetUserSet(ctx, query.GetUserSetParams{ID: id, UserID: c.t.userID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return badInput("no set %s in this user's log", id)
 	}
 	if err != nil {
 		return err
 	}
-	e, err := c.sets(ctx, s.WorkoutExerciseID)
+	e, err := c.exercise(ctx, stored.WorkoutExerciseID.String())
 	if err != nil {
 		return err
 	}
-	c.base = append(c.base, &milo.RowVersion{Table: "set", Id: s.ID.String(), UpdatedAt: ts(s.UpdatedAt)})
-	if in.Op == "delete_set" {
-		e.after[s.ID] = nil
-		row := rows.Set(s)
-		row.Deleted, row.UpdatedAt = true, ts(c.t.now)
-		c.changes = append(c.changes, rows.Change(row))
+	if _, touched := e.after[id]; !touched {
+		c.base = append(c.base, version("set", id, stored.UpdatedAt))
+	}
+	if in.Op == "delete" {
+		e.after[id] = nil
 		return nil
 	}
-	if err := apply(&s, in); err != nil {
+	s := stored
+	if earlier := e.after[id]; earlier != nil {
+		s = *earlier
+	}
+	if err := in.apply(&s); err != nil {
 		return err
 	}
-	e.after[s.ID] = &s
-	row := rows.Set(s)
-	row.UpdatedAt = ts(c.t.now)
-	c.changes = append(c.changes, rows.Change(row))
+	e.after[id] = &s
 	return nil
 }
 
-func (c *changeCard) addSet(ctx context.Context, in editInput) error {
-	weID, err := parseUUID(in.WorkoutExerciseID, "workout_exercise_id")
-	if err != nil {
-		return err
+// last is the exercise's final set once the card's edits so far are counted.
+func (e *exerciseEdits) last() (query.Set, bool) {
+	if n := len(e.added); n > 0 {
+		return e.added[n-1], true
 	}
-	e, err := c.sets(ctx, weID)
-	if err != nil {
-		return err
-	}
-	s := query.Set{ID: newID(), WorkoutExerciseID: weID, Position: int32(len(e.before) + len(e.added) + 1), Kind: "normal", WeightUnit: "kg", Done: true}
 	if n := len(e.before); n > 0 {
-		s.WeightUnit = e.before[n-1].WeightUnit
+		return e.before[n-1], true
 	}
-	if err := apply(&s, in); err != nil {
-		return err
-	}
-	e.added = append(e.added, s)
-	row := rows.Set(s)
-	row.UpdatedAt = ts(c.t.now)
-	c.changes = append(c.changes, rows.Change(row))
-	return nil
+	return query.Set{}, false
 }
 
 // apply copies the fields an edit sets onto a set.
-func apply(s *query.Set, in editInput) error {
+func (in setEdit) apply(s *query.Set) error {
 	if in.Weight != nil {
 		w := strings.TrimSpace(*in.Weight)
 		if !rows.ValidWeight(w) {
@@ -223,93 +429,22 @@ func apply(s *query.Set, in editInput) error {
 	if in.Done != nil {
 		s.Done = *in.Done
 	}
-	return nil
-}
-
-func (c *changeCard) renameWorkout(ctx context.Context, in editInput) error {
-	id, err := parseUUID(in.WorkoutID, "workout_id")
-	if err != nil {
-		return err
+	if in.Kind != "" {
+		s.Kind = in.Kind
 	}
-	name := strings.TrimSpace(in.Name)
-	if name == "" {
-		return badInput("rename_workout needs a name")
-	}
-	w, err := c.t.s.q.GetUserWorkout(ctx, query.GetUserWorkoutParams{ID: id, UserID: c.t.userID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return badInput("no workout %s in this user's log", id)
-	}
-	if err != nil {
-		return err
-	}
-	c.base = append(c.base, &milo.RowVersion{Table: "workout", Id: w.ID.String(), UpdatedAt: ts(w.UpdatedAt)})
-	c.lines = append(c.lines, &milo.CardLine{Label: "Workout name", Before: w.Name, After: name})
-	row := rows.Workout(w)
-	row.Name, row.UpdatedAt = name, ts(c.t.now)
-	c.changes = append(c.changes, rows.Change(row))
-	if c.workoutID == uuid.Nil {
-		c.workoutID = w.ID
-	}
-	return nil
-}
-
-func (c *changeCard) updateExercise(ctx context.Context, in editInput) error {
-	id, err := parseUUID(in.ExerciseID, "exercise_id")
-	if err != nil {
-		return err
-	}
-	ex, err := c.t.visibleExercise(ctx, id)
-	if err != nil {
-		return err
-	}
-	if ex.UserID == nil {
-		return badInput("%s is built in and can't be edited; propose a new exercise instead", ex.Name)
-	}
-	c.base = append(c.base, &milo.RowVersion{Table: "exercise", Id: ex.ID.String(), UpdatedAt: ts(ex.UpdatedAt)})
-	row := rows.Exercise(ex)
-	row.UpdatedAt = ts(c.t.now)
-	line := func(label, before, after string) {
-		c.lines = append(c.lines, &milo.CardLine{Label: label, Before: before, After: after})
-	}
-	if n := strings.TrimSpace(in.Name); n != "" && n != ex.Name {
-		line("Name", ex.Name, n)
-		row.Name = n
-	}
-	if m := rows.Parse[milo.Measurement](in.Measurement); m != milo.Measurement_MEASUREMENT_UNSPECIFIED && in.Measurement != ex.Measurement {
-		line("Counted", countedText(ex.Measurement, ex.Unilateral), countedText(in.Measurement, ex.Unilateral))
-		row.Measurement = m
-	}
-	if in.Unilateral != nil && *in.Unilateral != ex.Unilateral {
-		line("One side at a time", yesNo(ex.Unilateral), yesNo(*in.Unilateral))
-		row.Unilateral = *in.Unilateral
-	}
-	if in.Equipment != "" && in.Equipment != ex.Equipment {
-		line("Equipment", ex.Equipment, in.Equipment)
-		row.Equipment = in.Equipment
-	}
-	if len(in.PrimaryMuscles) > 0 {
-		line("Works", strings.Join(ex.PrimaryMuscles, ", "), strings.Join(in.PrimaryMuscles, ", "))
-		row.PrimaryMuscles = in.PrimaryMuscles
-	}
-	if in.MET != nil {
-		row.Met = in.MET
-	}
-	if in.Confirm && ex.Approximate {
-		line("Status", "Approximate", "Confirmed")
-		row.Approximate = false
-	}
-	c.changes = append(c.changes, rows.Change(row))
 	return nil
 }
 
 // setLines shows untouched sets as one line, each changed or added set, and the volume before and after.
-func (c *changeCard) setLines(e *setEdits) []*milo.CardLine {
+func (c *changeCard) setLines(e *exerciseEdits) []*milo.CardLine {
+	if e.we.GetDeleted() || (len(e.after) == 0 && len(e.added) == 0) {
+		return nil
+	}
 	var lines []*milo.CardLine
 	var untouched []int
-	var before, after []query.Set
+	var after []query.Set
 	for i, s := range e.before {
 		n := i + 1
-		before = append(before, s)
 		edited, touched := e.after[s.ID]
 		switch {
 		case !touched:
@@ -333,7 +468,7 @@ func (c *changeCard) setLines(e *setEdits) []*milo.CardLine {
 		}
 		lines = append([]*milo.CardLine{{Label: setRange(untouched), After: text}}, lines...)
 	}
-	v0 := maths.VolumeKg(setInputs(e.measurement, before))
+	v0 := maths.VolumeKg(setInputs(e.measurement, e.before))
 	v1 := maths.VolumeKg(setInputs(e.measurement, after))
 	if e.measurement == maths.RepsLoad && v0 != v1 {
 		lines = append(lines, &milo.CardLine{Label: "Volume for this exercise", Before: thousands(int64(displayKg(v0, c.t.displayUnit) + 0.5)), After: kgText(v1, c.t.displayUnit)})
@@ -371,11 +506,4 @@ func allSame(measurement string, sets []query.Set) bool {
 		}
 	}
 	return true
-}
-
-func yesNo(b bool) string {
-	if b {
-		return "Yes"
-	}
-	return "No"
 }
