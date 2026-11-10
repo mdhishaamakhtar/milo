@@ -4,11 +4,13 @@ import Observation
 import OSLog
 import UIKit
 
-/// The running workout's screen state: which exercise is open, which number is
-/// being typed, the rest timer, and the add field.
+/// The workout screen's state: which exercise is open, which number is being typed,
+/// the rest timer, and the add field. It shows the running workout, or edits a finished one.
 @Observable
 final class WorkoutModel {
     let app: AppModel
+    /// nil follows the running workout; an id edits that finished one.
+    let workoutID: UUID?
     let detail = Live<WorkoutDetail?>(nil)
 
     /// The exercise shown open; nil means the first one not finished.
@@ -22,6 +24,8 @@ final class WorkoutModel {
     var restTotal: TimeInterval = 60
     var restForSet = 0
     var query = ""
+    /// An exercise with logged sets waiting for "Remove" to be confirmed.
+    var removing: ExerciseEntry?
 
     struct Editing: Equatable {
         enum Field { case weight, reps, seconds }
@@ -29,17 +33,24 @@ final class WorkoutModel {
         var field: Field
     }
 
-    init(app: AppModel) {
+    init(app: AppModel, workoutID: UUID? = nil) {
         self.app = app
+        self.workoutID = workoutID
     }
 
     func watch() {
-        let db = app.db
+        let db = app.db, workoutID = workoutID
         detail.watch(db) { d in
-            guard let w = try db.runningWorkout(d) else { return nil }
-            return try db.workoutDetail(d, id: w.id)
+            guard let id = try workoutID ?? db.runningWorkout(d)?.id else { return nil }
+            return try db.workoutDetail(d, id: id)
         }
     }
+
+    /// Editing a finished workout: new sets count as done and there's no rest timer.
+    var isPast: Bool { detail.value?.workout.endedAt != nil }
+
+    /// Sets in the workout that aren't ticked, which saving drops.
+    var untickedCount: Int { entries.reduce(0) { $0 + $1.sets.count - $1.doneSets.count } }
 
     var entries: [ExerciseEntry] { detail.value?.entries ?? [] }
 
@@ -60,7 +71,7 @@ final class WorkoutModel {
             let done = try app.db.toggleDone(set.id)
             app.edited()
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            if done {
+            if done && !isPast {
                 let rest = entry.restS ?? (try? app.db.writer.read { try app.db.settings($0) })?.restDefaultS ?? 60
                 startRest(seconds: rest, nextSet: (entry.sets.firstIndex { $0.id == set.id } ?? 0) + 2)
                 if entry.sets.allSatisfy({ $0.id == set.id || $0.done }) { openID = nil }
@@ -71,18 +82,48 @@ final class WorkoutModel {
     }
 
     func addSet(to entry: ExerciseEntry) {
-        _ = try? app.db.addSet(to: entry.id)
+        _ = try? app.db.addSet(to: entry.id, done: isPast)
         app.edited()
     }
 
     func delete(_ set: LoggedSet) {
+        if editing?.setID == set.id { closePad() }
         try? app.db.deleteSet(set.id)
         app.edited()
     }
 
+    /// Removes an exercise straight away if nothing was logged, else asks first.
+    func askRemove(_ entry: ExerciseEntry) {
+        if entry.doneSets.isEmpty { remove(entry) } else { removing = entry }
+    }
+
     func remove(_ entry: ExerciseEntry) {
+        if let editing, entry.sets.contains(where: { $0.id == editing.setID }) { closePad() }
         try? app.db.removeExercise(entry.id)
-        openID = nil
+        if openID == entry.id { openID = nil }
+        removing = nil
+        app.edited()
+    }
+
+    /// Saves edits to a finished workout, and updates Health if it was saved there.
+    func saveEdits() {
+        guard let w = detail.value?.workout, let end = w.endedAt else { return }
+        closePad()
+        do {
+            try app.db.finishWorkout(w.id, name: w.name, notes: w.notes, at: end)
+            if w.healthUUID != nil { Task { [health = app.health] in await health.save(workoutID: w.id) } }
+            app.edited()
+        } catch {
+            log.error("save edits: \(error.localizedDescription)")
+        }
+    }
+
+    /// Throws the whole workout away.
+    func discard() {
+        guard let w = detail.value?.workout else { return }
+        closePad()
+        restEndsAt = nil
+        try? app.db.deleteWorkout(w.id)
         app.edited()
     }
 

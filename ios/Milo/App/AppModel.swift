@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Observation
 import OSLog
 
@@ -33,13 +34,34 @@ final class AppModel {
         sync.soon()
     }
 
-    func startWorkout(template: Template? = nil) {
+    /// Starts a workout, from a template or a past workout's exercises. One runs at a time:
+    /// if one is already going, this opens it instead.
+    func startWorkout(template: Template? = nil, copying workoutID: UUID? = nil) {
         do {
-            try db.startWorkout(template: template)
+            if try db.writer.read({ try db.runningWorkout($0) }) == nil {
+                if let workoutID, let past = try db.writer.read({ try Workout.fetchOne($0, key: workoutID) }) {
+                    try db.startWorkout(name: past.name, items: try db.items(ofWorkout: workoutID), templateId: past.templateId)
+                } else {
+                    try db.startWorkout(template: template)
+                }
+                edited()
+            }
             showingWorkout = true
-            edited()
         } catch {
             log.error("start workout: \(error.localizedDescription)")
+        }
+    }
+}
+
+extension AppModel {
+    /// Deletes a workout here and, if it was saved there, from Apple Health.
+    func deleteWorkout(_ workout: Workout) {
+        do {
+            try db.deleteWorkout(workout.id)
+            Task { [health] in await health.remove(workout.healthUUID) }
+            edited()
+        } catch {
+            log.error("delete workout: \(error.localizedDescription)")
         }
     }
 }

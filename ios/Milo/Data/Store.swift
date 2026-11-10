@@ -28,29 +28,12 @@ nonisolated struct WorkoutDetail: Identifiable, Hashable, Sendable {
 
     var doneSetCount: Int { entries.reduce(0) { $0 + $1.doneSets.count } }
     var volumeKg: Double { entries.reduce(0) { $0 + Maths.volumeKg($1.inputs) } }
-
-    /// "4a", "4b" for supersets; "1", "2" otherwise.
-    func label(for entry: ExerciseEntry) -> String {
-        var number = 0
-        var seenGroups: [String: (number: Int, count: Int)] = [:]
-        for e in entries {
-            if !e.we.groupLabel.isEmpty, let g = seenGroups[e.we.groupLabel] {
-                seenGroups[e.we.groupLabel] = (g.number, g.count + 1)
-                if e.id == entry.id { return "\(g.number)\(Character(UnicodeScalar(97 + g.count)!))" }
-                continue
-            }
-            number += 1
-            let groupSize = entries.filter { !e.we.groupLabel.isEmpty && $0.we.groupLabel == e.we.groupLabel }.count
-            if !e.we.groupLabel.isEmpty { seenGroups[e.we.groupLabel] = (number, 1) }
-            if e.id == entry.id { return groupSize > 1 ? "\(number)a" : "\(number)" }
-        }
-        return ""
-    }
 }
 
 nonisolated struct WorkoutSummary: Identifiable, Hashable, Sendable {
     var workout: Workout
-    var exerciseCount: Int
+    var exerciseNames: [String]
+    var exerciseCount: Int { exerciseNames.count }
     var doneSets: Int
     var volumeKg: Double
     var id: UUID { workout.id }
@@ -137,19 +120,19 @@ nonisolated extension AppDatabase {
         let ids = workouts.map(\.id)
         let wes = try WorkoutExercise.filter(ids.contains(Column("workoutId")) && Column("deleted") == false).fetchAll(db)
         let exercises = try Exercise.filter(Set(wes.map(\.exerciseId)).contains(Column("id"))).fetchAll(db)
-        let measurement = Dictionary(uniqueKeysWithValues: exercises.map { ($0.id, $0.measurement) })
+        let byID = Dictionary(uniqueKeysWithValues: exercises.map { ($0.id, $0) })
         let sets = try LoggedSet.filter(wes.map(\.id).contains(Column("workoutExerciseId")) && Column("deleted") == false).fetchAll(db)
         let setsByWE = Dictionary(grouping: sets, by: \.workoutExerciseId)
         let wesByWorkout = Dictionary(grouping: wes, by: \.workoutId)
         return workouts.map { w in
-            let mine = wesByWorkout[w.id] ?? []
+            let mine = (wesByWorkout[w.id] ?? []).sorted { $0.position < $1.position }
             var volume = 0.0, done = 0
             for we in mine {
                 let s = setsByWE[we.id] ?? []
                 done += s.filter(\.done).count
-                volume += Maths.volumeKg(s.map { $0.input(measurement[we.exerciseId] ?? .repsLoad) })
+                volume += Maths.volumeKg(s.map { $0.input(byID[we.exerciseId]?.measurement ?? .repsLoad) })
             }
-            return WorkoutSummary(workout: w, exerciseCount: mine.count, doneSets: done, volumeKg: volume)
+            return WorkoutSummary(workout: w, exerciseNames: mine.map { byID[$0.exerciseId]?.name ?? "Exercise" }, doneSets: done, volumeKg: volume)
         }
     }
 
@@ -234,15 +217,29 @@ nonisolated extension AppDatabase {
 
     @discardableResult
     func startWorkout(name: String? = nil, template: Template? = nil, now: Date = Date()) throws -> Workout {
+        try startWorkout(name: name ?? template?.name, items: template?.items ?? [], templateId: template?.id, now: now)
+    }
+
+    /// A new workout with these exercises, numbers filled in from last time.
+    @discardableResult
+    func startWorkout(name: String?, items: [TemplateItem], templateId: UUID? = nil, now: Date = Date()) throws -> Workout {
         try writer.write { db in
             let workout = Workout(
-                id: UUID(), name: name ?? template?.name ?? Format.defaultWorkoutName(now), notes: "", startedAt: now, endedAt: nil,
-                templateId: template?.id, healthUUID: nil, updatedAt: now, deleted: false, dirty: true)
+                id: UUID(), name: name ?? Format.defaultWorkoutName(now), notes: "", startedAt: now, endedAt: nil,
+                templateId: templateId, healthUUID: nil, updatedAt: now, deleted: false, dirty: true)
             try workout.save(db)
-            for (i, item) in (template?.items ?? []).enumerated() {
+            for (i, item) in items.enumerated() {
                 try insertExercise(db, item.exerciseId, into: workout.id, position: i + 1, groupLabel: item.groupLabel, now: now)
             }
             return workout
+        }
+    }
+
+    /// A workout's exercises in order, supersets kept: for templates and "Do it again".
+    func items(ofWorkout id: UUID) throws -> [TemplateItem] {
+        try writer.read { db in
+            try WorkoutExercise.filter(Column("workoutId") == id && Column("deleted") == false).order(Column("position")).fetchAll(db)
+                .map { TemplateItem(exerciseId: $0.exerciseId, groupLabel: $0.groupLabel) }
         }
     }
 
@@ -281,7 +278,7 @@ nonisolated extension AppDatabase {
 
     /// A new set copying the one before it.
     @discardableResult
-    func addSet(to weId: UUID, now: Date = Date()) throws -> LoggedSet {
+    func addSet(to weId: UUID, done: Bool = false, now: Date = Date()) throws -> LoggedSet {
         try writer.write { db in
             let previous = try LoggedSet.filter(Column("workoutExerciseId") == weId && Column("deleted") == false).order(Column("position").desc).fetchOne(db)
             let we = try WorkoutExercise.fetchOne(db, key: weId)
@@ -289,7 +286,7 @@ nonisolated extension AppDatabase {
             var set = previous ?? LoggedSet(id: UUID(), workoutExerciseId: weId, position: 0, kind: .normal, reps: nil, weight: "", unit: unit, perSide: false, durationS: nil, distanceM: nil, rpe: nil, done: false, updatedAt: now, deleted: false, dirty: true)
             set.id = UUID()
             set.position = (previous?.position ?? 0) + 1
-            set.done = false
+            set.done = done
             set.updatedAt = now
             set.dirty = true
             try set.save(db)
@@ -376,29 +373,31 @@ nonisolated extension AppDatabase {
         try writer.write { db in try w.save(db) }
     }
 
-    /// Ends a workout. Sets that were never ticked are dropped, and exercises left with none.
-    func finishWorkout(_ id: UUID, name: String, notes: String, at end: Date = Date()) throws {
+    /// Ends a workout, or saves edits to a finished one. Sets that were never ticked are
+    /// dropped, and exercises left with none.
+    func finishWorkout(_ id: UUID, name: String, notes: String, at end: Date = Date(), now: Date = Date()) throws {
         try writer.write { db in
             guard var w = try Workout.fetchOne(db, key: id) else { return }
             for we in try WorkoutExercise.filter(Column("workoutId") == id && Column("deleted") == false).fetchAll(db) {
                 let sets = try LoggedSet.filter(Column("workoutExerciseId") == we.id && Column("deleted") == false).fetchAll(db)
                 for s in sets where !s.done {
-                    try s.tombstone(at: end).save(db)
+                    try s.tombstone(at: now).save(db)
                 }
                 if !sets.contains(where: \.done) {
-                    try we.tombstone(at: end).save(db)
+                    try we.tombstone(at: now).save(db)
                 }
             }
             w.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? w.name : name
             w.notes = notes
             w.endedAt = end
-            w.updatedAt = end
+            w.updatedAt = now
             w.dirty = true
             try w.save(db)
         }
     }
 
-    func discardWorkout(_ id: UUID, now: Date = Date()) throws {
+    /// Deletes a workout with its exercises and sets: discarding a running one, or deleting one from History.
+    func deleteWorkout(_ id: UUID, now: Date = Date()) throws {
         try writer.write { db in
             guard let w = try Workout.fetchOne(db, key: id) else { return }
             try w.tombstone(at: now).save(db)
@@ -428,11 +427,7 @@ nonisolated extension AppDatabase {
     /// A template from a workout's exercises, in order, supersets kept.
     @discardableResult
     func templateFrom(workout id: UUID, name: String, now: Date = Date()) throws -> Template {
-        let items = try writer.read { db in
-            try WorkoutExercise.filter(Column("workoutId") == id && Column("deleted") == false).order(Column("position")).fetchAll(db)
-                .map { TemplateItem(exerciseId: $0.exerciseId, groupLabel: $0.groupLabel) }
-        }
-        let t = Template(id: UUID(), name: name, notes: "", items: items, updatedAt: now, deleted: false, dirty: true)
+        let t = Template(id: UUID(), name: name, notes: "", items: try items(ofWorkout: id), updatedAt: now, deleted: false, dirty: true)
         try save(t, now: now)
         return t
     }
@@ -447,5 +442,95 @@ nonisolated extension AppDatabase {
     func addBody(weightKg: Double?, bodyFatPct: Double?, at: Date, source: String, id: UUID = UUID(), now: Date = Date()) throws {
         let m = BodyMeasurement(id: id, measuredAt: at, weightKg: weightKg, bodyFatPct: bodyFatPct, source: source, updatedAt: now, deleted: false, dirty: true)
         try writer.write { db in try m.save(db) }
+    }
+}
+
+/// What a past workout's exercise card says beside its sets.
+nonisolated struct ExerciseInsight: Hashable, Sendable {
+    /// The set that beat every earlier workout's heaviest.
+    var heaviestSet: UUID?
+    /// When an earlier workout went heavier: its date and top set.
+    var earlierTop: LoggedSet?
+    var earlierTopDate: Date?
+}
+
+nonisolated extension AppDatabase {
+    /// "Heaviest yet" and "Top set on 10 Oct was…" for each loaded exercise in a workout.
+    func insights(_ db: Database, for detail: WorkoutDetail) throws -> [UUID: ExerciseInsight] {
+        let start = detail.workout.startedAt
+        var out: [UUID: ExerciseInsight] = [:]
+        for e in detail.entries where e.exercise.measurement == .repsLoad {
+            func load(_ s: LoggedSet) -> Double? { s.done && (s.reps ?? 0) > 0 ? Maths.toKg(s.weight, s.unit) : nil }
+            var earlier: (kg: Double, date: Date, set: LoggedSet)?
+            for past in try history(db, exerciseId: e.exercise.id) where past.workout.startedAt < start {
+                for s in past.sets {
+                    if let kg = load(s), kg > (earlier?.kg ?? 0) { earlier = (kg, past.workout.startedAt, s) }
+                }
+            }
+            let mine = e.sets.compactMap { s in load(s).map { (set: s, kg: $0) } }
+            guard let top = mine.map(\.kg).max(), let earlier else { continue }
+            if top > earlier.kg + 1e-9 {
+                out[e.id] = ExerciseInsight(heaviestSet: mine.first { $0.kg == top }?.set.id)
+            } else if earlier.kg > top + 1e-9 {
+                out[e.id] = ExerciseInsight(earlierTop: earlier.set, earlierTopDate: earlier.date)
+            }
+        }
+        return out
+    }
+}
+
+// MARK: Templates and exercises
+
+nonisolated extension AppDatabase {
+    /// Exercises often done in the same workouts as these, most often first.
+    func companions(_ db: Database, of ids: [UUID], limit: Int = 2) throws -> [Exercise] {
+        guard !ids.isEmpty else { return [] }
+        let marks = Array(repeating: "?", count: ids.count).joined(separator: ",")
+        let found = try UUID.fetchAll(db, sql: """
+            SELECT b.exerciseId FROM workoutExercise a JOIN workoutExercise b ON b.workoutId = a.workoutId
+            JOIN workout w ON w.id = a.workoutId
+            WHERE a.exerciseId IN (\(marks)) AND b.exerciseId NOT IN (\(marks))
+              AND a.deleted = 0 AND b.deleted = 0 AND w.deleted = 0
+            GROUP BY b.exerciseId ORDER BY count(DISTINCT a.workoutId) DESC LIMIT ?
+            """, arguments: StatementArguments(ids + ids + [limit] as [any DatabaseValueConvertible]))
+        return try found.compactMap { id in try Exercise.fetchOne(db, key: id).flatMap { $0.deleted ? nil : $0 } }
+    }
+
+    /// How many finished workouts and templates use an exercise.
+    func uses(_ db: Database, exerciseId: UUID) throws -> (workouts: Int, templates: Int) {
+        let workouts = try Int.fetchOne(db, sql: """
+            SELECT count(DISTINCT we.workoutId) FROM workoutExercise we JOIN workout w ON w.id = we.workoutId
+            WHERE we.exerciseId = ? AND we.deleted = 0 AND w.deleted = 0
+            """, arguments: [exerciseId]) ?? 0
+        let templates = try Template.filter(Column("deleted") == false).fetchAll(db)
+            .filter { $0.items.contains { $0.exerciseId == exerciseId } }.count
+        return (workouts, templates)
+    }
+
+    /// A new exercise of your own.
+    @discardableResult
+    func createExercise(name: String, equipment: String, measurement: MeasurementKind, unilateral: Bool, now: Date = Date()) throws -> Exercise {
+        let e = Exercise(
+            id: UUID(), builtin: false, name: name, aliases: [], primaryMuscles: [], secondaryMuscles: [],
+            movementPattern: "", equipment: equipment, measurement: measurement, unilateral: unilateral,
+            met: nil, about: "", approximate: false, updatedAt: now, deleted: false, dirty: true)
+        try writer.write { db in try e.save(db) }
+        return e
+    }
+
+    func save(_ exercise: Exercise, now: Date = Date()) throws {
+        guard !exercise.builtin else { return }
+        var e = exercise
+        e.updatedAt = now
+        e.dirty = true
+        try writer.write { db in try e.save(db) }
+    }
+
+    /// Takes one of your exercises off your list. Past workouts keep showing it.
+    func deleteExercise(_ id: UUID, now: Date = Date()) throws {
+        try writer.write { db in
+            guard let e = try Exercise.fetchOne(db, key: id), !e.builtin else { return }
+            try e.tombstone(at: now).save(db)
+        }
     }
 }

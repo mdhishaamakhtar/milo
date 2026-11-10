@@ -19,7 +19,7 @@ struct ExerciseCard: View {
                 if entry.exercise.approximate { Badge(text: "Approximate") }
                 Spacer()
                 Menu {
-                    Button("Remove from workout", systemImage: "trash", role: .destructive) { model.remove(entry) }
+                    Button("Remove from workout", systemImage: "trash", role: .destructive) { model.askRemove(entry) }
                 } label: {
                     Image(systemName: "ellipsis").font(.system(size: 17, weight: .semibold)).foregroundStyle(Color.tx2)
                         .frame(width: 36, height: 30)
@@ -32,12 +32,14 @@ struct ExerciseCard: View {
             HStack(spacing: 8) {
                 Button { model.addSet(to: entry) } label: { Label("Set", systemImage: "plus") }
                 Button { noting.toggle(); note = entry.we.notes } label: { Label("Note", systemImage: "line.3.horizontal") }
-                Menu {
-                    ForEach([30, 45, 60, 90, 120, 150, 180], id: \.self) { s in
-                        Button(Format.clock(s)) { model.setRest(s, for: entry) }
+                if !model.isPast {
+                    Menu {
+                        ForEach([30, 45, 60, 90, 120, 150, 180], id: \.self) { s in
+                            Button(Format.clock(s)) { model.setRest(s, for: entry) }
+                        }
+                    } label: {
+                        Label("Rest \(Format.clock(entry.restS ?? 60))", systemImage: "timer")
                     }
-                } label: {
-                    Label("Rest \(Format.clock(entry.restS ?? 60))", systemImage: "timer")
                 }
             }
             .buttonStyle(.chip)
@@ -71,51 +73,57 @@ struct ExerciseCard: View {
         model.app.edited()
     }
 
-    // Columns: set number, last time, weight, reps, tick.
+    // Columns: set number, last time, weight, reps, tick. Rows (not a Grid) so each can swipe.
     private var grid: some View {
-        Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-            GridRow {
-                Text("Set").gridColumnAlignment(.center)
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Set").frame(width: 26)
                 Text("Last time").frame(maxWidth: .infinity, alignment: .leading)
                 if hasWeight {
-                    UnitSwitch(unit: Binding(get: { entry.unit }, set: { model.setUnit($0, for: entry) }))
+                    UnitSwitch(unit: Binding(get: { entry.unit }, set: { model.setUnit($0, for: entry) })).frame(width: 78)
                 }
-                Text(m == .timed ? "Time" : m == .distance ? "Metres" : "Reps")
+                Text(m == .timed ? "Time" : m == .distance ? "Metres" : "Reps").frame(width: 70)
                 Color.clear.frame(width: 40, height: 1)
             }
             .font(.cap)
             .foregroundStyle(Color.tx3)
 
             ForEach(Array(entry.sets.enumerated()), id: \.element.id) { i, set in
-                GridRow {
-                    Text("\(i + 1)")
-                        .font(.sofia(15, .bold))
-                        .foregroundStyle(set.id == currentSetID ? Color.tx : Color.tx3)
-                        .frame(width: 26)
-                    Text(lastTime(i))
-                        .font(.sofia(15, .medium))
-                        .foregroundStyle(Color.tx3)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if hasWeight {
-                        well(set, .weight, text: Format.weight(set, in: entry.unit), unit: entry.unit.rawValue).frame(width: 78)
+                row(i, set)
+                    .swipeToDelete("Delete set") { model.delete(set) }
+                    .contextMenu {
+                        Button("Delete set", systemImage: "trash", role: .destructive) { model.delete(set) }
                     }
-                    switch m {
-                    case .timed: well(set, .seconds, text: set.durationS.map(String.init) ?? "", unit: "s").frame(width: 70)
-                    default: well(set, .reps, text: set.reps.map(String.init) ?? "", unit: set.perSide ? "/side" : nil).frame(width: 70)
-                    }
-                    Button { model.tick(set, in: entry) } label: {
-                        tick(set)
-                    }
-                    .buttonStyle(.plain)
-                    .frame(width: 40)
-                    .accessibilityLabel(set.done ? "Set \(i + 1) done" : "Mark set \(i + 1) done")
-                }
-                .contextMenu {
-                    Button("Delete set", systemImage: "trash", role: .destructive) { model.delete(set) }
-                }
             }
         }
+    }
+
+    private func row(_ i: Int, _ set: LoggedSet) -> some View {
+        HStack(spacing: 8) {
+            Text("\(i + 1)")
+                .font(.sofia(15, .bold))
+                .foregroundStyle(set.id == currentSetID ? Color.tx : Color.tx3)
+                .frame(width: 26)
+            Text(lastTime(i))
+                .font(.sofia(15, .medium))
+                .foregroundStyle(Color.tx3)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if hasWeight {
+                well(set, .weight, text: Format.weight(set, in: entry.unit), unit: entry.unit.rawValue).frame(width: 78)
+            }
+            switch m {
+            case .timed: well(set, .seconds, text: set.durationS.map(String.init) ?? "", unit: "s").frame(width: 70)
+            default: well(set, .reps, text: set.reps.map(String.init) ?? "", unit: set.perSide ? "/side" : nil).frame(width: 70)
+            }
+            Button { model.tick(set, in: entry) } label: {
+                tick(set)
+            }
+            .buttonStyle(.plain)
+            .frame(width: 40)
+            .accessibilityLabel(set.done ? "Set \(i + 1) done" : "Mark set \(i + 1) done")
+        }
+        .contentShape(.rect)
     }
 
     private func lastTime(_ i: Int) -> String {
@@ -135,9 +143,11 @@ struct ExerciseCard: View {
             model.edit(set, field, in: entry)
         } label: {
             HStack(spacing: 2) {
-                Text(shown.isEmpty ? "–" : shown)
-                    .font(.sofia(18.5, .bold))
-                    .monospacedDigit()
+                if !(editing && shown.isEmpty) {
+                    Text(shown.isEmpty ? "–" : shown)
+                        .font(.sofia(18.5, .bold))
+                        .monospacedDigit()
+                }
                 if editing {
                     RoundedRectangle(cornerRadius: 1).fill(Color.or).frame(width: 2, height: 22)
                 }

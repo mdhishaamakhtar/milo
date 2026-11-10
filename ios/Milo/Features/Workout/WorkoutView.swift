@@ -1,8 +1,10 @@
 import SwiftUI
 
 /// The running workout, full screen. The chevron tucks it away; Today shows it live.
+/// Given a finished workout's id, the same screen edits that workout.
 struct WorkoutView: View {
     @Environment(AppModel.self) private var app
+    var workoutID: UUID?
     @State private var model: WorkoutModel?
     @State private var milo: MiloSession?
 
@@ -16,7 +18,7 @@ struct WorkoutView: View {
         }
         .onAppear {
             guard model == nil else { return }
-            let m = WorkoutModel(app: app)
+            let m = WorkoutModel(app: app, workoutID: workoutID)
             m.watch()
             model = m
             milo = MiloSession(app: app)
@@ -31,6 +33,10 @@ private struct WorkoutScreen: View {
     let milo: MiloSession
     @State private var talking = false
     @State private var finishing = false
+    @State private var discarding = false
+    @State private var droppingUnticked = false
+    /// The screen underneath's Milo context, handed back on the way out.
+    @State private var previousContext: MiloContext?
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -45,10 +51,26 @@ private struct WorkoutScreen: View {
                 .navigationDestination(isPresented: $finishing) { FinishView() }
         }
         .onChange(of: model.detail.value == nil) { _, gone in if gone { dismiss() } }
+        // An exercise went in: put the keyboard away so its sets show.
+        .onChange(of: model.entries.count) { old, new in if new > old { fieldFocused = false } }
+        .confirmationDialog(
+            "Remove \(model.removing?.exercise.shortName ?? "this exercise")?",
+            isPresented: Binding(get: { model.removing != nil }, set: { if !$0 { model.removing = nil } }),
+            titleVisibility: .visible,
+            presenting: model.removing
+        ) { entry in
+            Button("Remove from workout", role: .destructive) { model.remove(entry) }
+        } message: { entry in
+            Text("Its \(entry.doneSets.count) logged \(entry.doneSets.count == 1 ? "set goes" : "sets go") too.")
+        }
         .onAppear {
+            previousContext = app.miloContext
             if let w = model.detail.value?.workout {
                 app.miloContext = MiloContext(screen: "workout", prompt: "Next exercise, or tell Milo", workoutID: w.id)
             }
+        }
+        .onDisappear {
+            if let previousContext { app.miloContext = previousContext }
         }
     }
 
@@ -87,7 +109,7 @@ private struct WorkoutScreen: View {
             VStack(spacing: 8) {
                 if let end = model.restEndsAt, !talking { RestBar(endsAt: end) }
                 AddField(
-                    placeholder: talking ? "Correct it, e.g. \"it was a cable\"" : model.entries.isEmpty ? "Exercise name, or describe it" : "Next exercise, or tell Milo",
+                    placeholder: talking ? "Correct it, e.g. \"it was a cable\"" : model.entries.isEmpty ? "Exercise name, or describe it" : model.isPast ? "Add an exercise, or tell Milo" : "Next exercise, or tell Milo",
                     focused: $fieldFocused,
                     ask: ask)
             }
@@ -101,7 +123,7 @@ private struct WorkoutScreen: View {
             if talking {
                 Button { withAnimation(.snappy) { talking = false } } label: { Image(systemName: "chevron.left").foregroundStyle(Color.tx) }
                     .accessibilityLabel("Back to the exercises")
-            } else {
+            } else if !model.isPast {
                 Button { dismiss() } label: { Image(systemName: "chevron.down").foregroundStyle(Color.tx) }
                     .accessibilityLabel("Minimise workout")
             }
@@ -110,19 +132,46 @@ private struct WorkoutScreen: View {
             if let w = model.detail.value?.workout {
                 VStack(spacing: 1) {
                     Text(w.name).font(.sofia(16.5, .semibold)).lineLimit(1)
-                    HStack(spacing: 5) {
-                        Circle().fill(Color.or).frame(width: 6, height: 6)
-                        Text(timerInterval: w.startedAt...Date.distantFuture, countsDown: false)
-                            .font(.sofia(14, .medium)).monospacedDigit().foregroundStyle(Color.tx2)
+                    if model.isPast {
+                        Text("Editing, \(Format.shortDay(w.startedAt))").font(.sofia(14, .medium)).foregroundStyle(Color.tx2)
+                    } else {
+                        HStack(spacing: 5) {
+                            Circle().fill(Color.or).frame(width: 6, height: 6)
+                            Text(timerInterval: w.startedAt...Date.distantFuture, countsDown: false)
+                                .font(.sofia(14, .medium)).monospacedDigit().foregroundStyle(Color.tx2)
+                        }
                     }
                 }
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button("Finish") { model.closePad(); finishing = true }
+            if model.isPast {
+                Button("Done") {
+                    if model.untickedCount > 0 { droppingUnticked = true } else { model.saveEdits(); dismiss() }
+                }
                 .font(.sofia(16, .bold))
                 .tint(Color.tx)
-                .disabled(model.detail.value?.doneSetCount == 0)
+                .confirmationDialog("\(model.untickedCount) \(model.untickedCount == 1 ? "set isn't" : "sets aren't") ticked", isPresented: $droppingUnticked, titleVisibility: .visible) {
+                    Button("Save without them") { model.saveEdits(); dismiss() }
+                    Button("Keep editing", role: .cancel) {}
+                } message: {
+                    Text("Only ticked sets are kept.")
+                }
+            } else {
+                Button("Finish") {
+                    model.closePad()
+                    // With nothing ticked there's nothing to save: offer to throw it away instead.
+                    if model.detail.value?.doneSetCount == 0 { discarding = true } else { finishing = true }
+                }
+                .font(.sofia(16, .bold))
+                .tint(Color.tx)
+                .confirmationDialog("No sets ticked yet", isPresented: $discarding, titleVisibility: .visible) {
+                    Button("Discard workout", role: .destructive) { model.discard() }
+                    Button("Keep going", role: .cancel) {}
+                } message: {
+                    Text("Tick the sets you did to save them, or discard this workout.")
+                }
+            }
         }
     }
 
@@ -239,10 +288,24 @@ private struct FinishedCard: View {
                     .padding(.horizontal, 16).frame(minHeight: 54).contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                .background(Color.s1)
+                .swipeToDelete("Remove from workout", cornerRadius: 0) { model.askRemove(e) }
+                .contextMenu { RemoveButton(entry: e) }
             }
         }
-        .background(Color.s1, in: .rect(cornerRadius: Radius.card))
+        .background(Color.s1)
+        .clipShape(.rect(cornerRadius: Radius.card))
         .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
+    }
+}
+
+/// "Remove from workout", asking first when sets were logged.
+private struct RemoveButton: View {
+    @Environment(WorkoutModel.self) private var model
+    let entry: ExerciseEntry
+
+    var body: some View {
+        Button("Remove from workout", systemImage: "trash", role: .destructive) { model.askRemove(entry) }
     }
 }
 
@@ -264,6 +327,9 @@ private struct UpNext: View {
                     .padding(.horizontal, 4).frame(minHeight: 44).contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                .background(Color.bg)
+                .swipeToDelete("Remove from workout") { model.askRemove(e) }
+                .contextMenu { RemoveButton(entry: e) }
             }
         }
     }

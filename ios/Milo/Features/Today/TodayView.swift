@@ -4,6 +4,8 @@ struct TodayView: View {
     @Environment(AppModel.self) private var app
     @State private var data = Live(TodayData())
     @State private var editingTemplate: Template?
+    @State private var discardingRunning = false
+    @State private var deletingTemplate: Template?
 
     struct TodayData: Sendable {
         var running: WorkoutDetail?
@@ -18,6 +20,17 @@ struct TodayView: View {
                 ScreenHeader(eyebrow: Format.longDay(.now), title: "Today")
                 if let running = data.value.running {
                     LiveWorkoutCard(detail: running) { app.showingWorkout = true }
+                        .contextMenu {
+                            Button("Discard workout", systemImage: "trash", role: .destructive) { discardingRunning = true }
+                        }
+                        .confirmationDialog("Discard this workout?", isPresented: $discardingRunning, titleVisibility: .visible) {
+                            Button("Discard workout", role: .destructive) {
+                                try? app.db.deleteWorkout(running.workout.id)
+                                app.edited()
+                            }
+                        } message: {
+                            Text("None of its \(running.doneSetCount) logged sets will be kept.")
+                        }
                 } else {
                     WeekCard(workouts: data.value.lastWeek) { app.startWorkout() }
                 }
@@ -37,6 +50,11 @@ struct TodayView: View {
                             ForEach(data.value.templates) { t in
                                 TemplateCard(summary: t, edit: { editingTemplate = t.template }) {
                                     app.startWorkout(template: t.template)
+                                }
+                                .contextMenu {
+                                    Button("Start workout", systemImage: "play") { app.startWorkout(template: t.template) }
+                                    Button("Edit template", systemImage: "pencil") { editingTemplate = t.template }
+                                    Button("Delete template", systemImage: "trash", role: .destructive) { deletingTemplate = t.template }
                                 }
                             }
                         }
@@ -67,6 +85,19 @@ struct TodayView: View {
         .miloScreen()
         .toolbarVisibility(.hidden, for: .navigationBar)
         .sheet(item: $editingTemplate) { TemplateEditor(template: $0) }
+        .confirmationDialog(
+            "Delete \(deletingTemplate?.name ?? "template")?",
+            isPresented: Binding(get: { deletingTemplate != nil }, set: { if !$0 { deletingTemplate = nil } }),
+            titleVisibility: .visible,
+            presenting: deletingTemplate
+        ) { t in
+            Button("Delete template", role: .destructive) {
+                try? app.db.deleteTemplate(t.id)
+                app.edited()
+            }
+        } message: { _ in
+            Text("Workouts you did from it stay in History.")
+        }
         .onAppear {
             app.miloContext = .today
             let db = app.db
@@ -124,10 +155,10 @@ private struct WeekCard: View {
             }
             Divider().overlay(Color.line).padding(.vertical, 16)
             HStack {
-                Text(countText).font(.sofia(15, .semibold))
-                Spacer()
+                Text(countText).font(.sofia(15, .semibold)).lineLimit(1).fixedSize().layoutPriority(1)
+                Spacer(minLength: 12)
                 if let last = workouts.first {
-                    Text("Last: \(last.workout.name), \(last.workout.startedAt.formatted(.dateTime.weekday(.abbreviated)))")
+                    Text(lastText(last.workout))
                         .font(.sofia(14.5, .regular))
                         .foregroundStyle(Color.tx2)
                         .lineLimit(1)
@@ -140,6 +171,13 @@ private struct WeekCard: View {
             .padding(.top, 16)
         }
         .card()
+    }
+
+    /// "Last: Legs, Sat", or "Last: today".
+    private func lastText(_ w: Workout) -> String {
+        if Calendar.current.isDateInToday(w.startedAt) { return "Last: today" }
+        if Calendar.current.isDateInYesterday(w.startedAt) { return "Last: yesterday" }
+        return "Last: \(w.name), \(w.startedAt.formatted(.dateTime.weekday(.abbreviated)))"
     }
 
     private var countText: String {
@@ -234,47 +272,5 @@ private struct TemplateCard: View {
         .card()
         .contentShape(.rect)
         .onTapGesture(perform: edit)
-    }
-}
-
-/// Finished workouts as rows: date, name, length, volume.
-struct WorkoutList: View {
-    @Environment(AppModel.self) private var app
-    let workouts: [WorkoutSummary]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(workouts.enumerated()), id: \.element.id) { i, w in
-                if i > 0 { Divider().overlay(Color.line).padding(.leading, 72) }
-                NavigationLink(value: w.workout.id) {
-                    HStack(spacing: 12) {
-                        VStack(spacing: 0) {
-                            Text(w.workout.startedAt.formatted(.dateTime.weekday(.abbreviated))).font(.sofia(12, .semibold)).foregroundStyle(Color.tx3)
-                            Text(w.workout.startedAt.formatted(.dateTime.day())).font(.sofia(19, .bold))
-                        }
-                        .frame(width: 44)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(w.workout.name).font(.h3).lineLimit(1)
-                            Text(detail(w)).font(.sub).foregroundStyle(Color.tx2)
-                        }
-                        Spacer(minLength: 8)
-                        Text(Format.mass(w.volumeKg, .kg)).font(.sofia(14.5, .regular)).foregroundStyle(Color.tx2)
-                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.tx3)
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 64)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .background(Color.s1, in: .rect(cornerRadius: Radius.card))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
-        .navigationDestination(for: UUID.self) { WorkoutDetailView(workoutID: $0) }
-    }
-
-    private func detail(_ w: WorkoutSummary) -> String {
-        let n = "\(w.exerciseCount) \(w.exerciseCount == 1 ? "exercise" : "exercises")"
-        return w.minutes.map { "\($0) min, \(n)" } ?? n
     }
 }

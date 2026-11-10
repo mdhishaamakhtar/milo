@@ -11,13 +11,13 @@ struct MainView: View {
         @Bindable var app = app
         TabView(selection: $tab) {
             Tab("Today", systemImage: "dumbbell", value: .today) {
-                NavigationStack { TodayView() }
+                NavigationStack { TodayView().miloDestinations() }
             }
             Tab("History", systemImage: "calendar", value: .history) {
-                NavigationStack { HistoryView() }
+                NavigationStack { HistoryView().miloDestinations() }
             }
             Tab("Progress", systemImage: "chart.line.uptrend.xyaxis", value: .progress) {
-                NavigationStack { ProgressTab() }
+                NavigationStack { ProgressTab().miloDestinations() }
             }
         }
         .tabViewBottomAccessory {
@@ -59,11 +59,22 @@ struct AskMiloBar: View {
     }
 }
 
-/// Large title with a small line above it, and the avatar.
-struct ScreenHeader: View {
-    @Environment(AppModel.self) private var app
+/// Where a tab's stack can go: a past workout or an exercise.
+struct WorkoutRoute: Hashable { let id: UUID }
+struct ExerciseRoute: Hashable { let id: UUID }
+
+extension View {
+    func miloDestinations() -> some View {
+        navigationDestination(for: WorkoutRoute.self) { WorkoutDetailView(workoutID: $0.id) }
+            .navigationDestination(for: ExerciseRoute.self) { ExerciseDetailView(exerciseID: $0.id) }
+    }
+}
+
+/// Large title with a small line above it, and the avatar (or another button).
+struct ScreenHeader<Trailing: View>: View {
     let eyebrow: String
     let title: String
+    @ViewBuilder var trailing: Trailing
 
     var body: some View {
         HStack(alignment: .bottom) {
@@ -72,13 +83,27 @@ struct ScreenHeader: View {
                 Text(title).font(.large).tracking(-0.75)
             }
             Spacer()
-            AvatarButton(initial: String(app.session.user?.username.prefix(1).uppercased() ?? "M")) {
-                app.showingProfile = true
-            }
-            .padding(.bottom, 2)
+            trailing.padding(.bottom, 2)
         }
         .padding(.horizontal, 4)
         .padding(.top, 8)
         .padding(.bottom, 18)
+    }
+}
+
+extension ScreenHeader where Trailing == ProfileAvatar {
+    init(eyebrow: String, title: String) {
+        self.init(eyebrow: eyebrow, title: title) { ProfileAvatar() }
+    }
+}
+
+/// The signed-in user's initial; opens Profile.
+struct ProfileAvatar: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        AvatarButton(initial: String(app.session.user?.username.prefix(1).uppercased() ?? "M")) {
+            app.showingProfile = true
+        }
     }
 }

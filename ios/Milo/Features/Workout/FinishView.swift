@@ -11,6 +11,7 @@ struct FinishView: View {
     @State private var saveToHealth = true
     @State private var saveTemplate = false
     @State private var bodyKg: Double?
+    @State private var discarding = false
     @FocusState private var naming: Bool
 
     var body: some View {
@@ -24,8 +25,12 @@ struct FinishView: View {
                         }
                         Text(timeRange(detail.workout.startedAt)).font(.sub).foregroundStyle(Color.tx2)
                     }
-                    stats(detail)
+                    WorkoutStats(minutes: max(1, Int(Date.now.timeIntervalSince(detail.workout.startedAt) / 60)), volumeKg: detail.volumeKg, sets: detail.doneSetCount)
                     exercises(detail)
+                    if case let skipped = detail.entries.reduce(0, { $0 + $1.sets.count - $1.doneSets.count }), skipped > 0 {
+                        Text("\(skipped) \(skipped == 1 ? "set" : "sets") you didn't tick won't be saved.")
+                            .font(.sub).foregroundStyle(Color.tx2).padding(.horizontal, 4)
+                    }
                     VStack(spacing: 0) {
                         toggleRow("heart", "Save to Apple Health", detail: kcalText(detail), isOn: $saveToHealth)
                         Divider().overlay(Color.line).padding(.leading, 60)
@@ -40,9 +45,20 @@ struct FinishView: View {
                     .padding(16)
                     .background(Color.s1, in: .rect(cornerRadius: 20))
                     .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.line))
+                    Button("Discard workout", role: .destructive) { discarding = true }
+                        .font(.link)
+                        .foregroundStyle(Color.red)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.top, 6)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
+                .padding(.bottom, 16)
+            }
+            .confirmationDialog("Discard this workout?", isPresented: $discarding, titleVisibility: .visible) {
+                Button("Discard workout", role: .destructive) { model.discard() }
+            } message: {
+                Text("None of its \(detail.doneSetCount) logged sets will be kept.")
             }
             .safeAreaInset(edge: .bottom) {
                 Button("Save workout") { save(detail) }
@@ -62,30 +78,6 @@ struct FinishView: View {
 
     private func timeRange(_ start: Date) -> String {
         Format.longDay(start) + ", " + start.formatted(date: .omitted, time: .shortened) + " to " + Date.now.formatted(date: .omitted, time: .shortened)
-    }
-
-    private func stats(_ d: WorkoutDetail) -> some View {
-        let minutes = max(1, Int(Date.now.timeIntervalSince(d.workout.startedAt) / 60))
-        return HStack(spacing: 0) {
-            stat("\(minutes)", "min", "Duration")
-            Divider().overlay(Color.line).padding(.vertical, 4)
-            stat(Format.mass(d.volumeKg, .kg).replacingOccurrences(of: " kg", with: ""), "kg", "Volume").padding(.leading, 16)
-            Divider().overlay(Color.line).padding(.vertical, 4)
-            stat("\(d.doneSetCount)", nil, "Sets").padding(.leading, 16)
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .card()
-    }
-
-    private func stat(_ value: String, _ unit: String?, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value).font(.sofia(23, .bold))
-                if let unit { Text(unit).font(.sofia(14, .semibold)).foregroundStyle(Color.tx2) }
-            }
-            Text(label).font(.cap).foregroundStyle(Color.tx3)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func exercises(_ d: WorkoutDetail) -> some View {

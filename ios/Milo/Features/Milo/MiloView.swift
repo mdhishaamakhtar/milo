@@ -14,14 +14,13 @@ struct MiloView: View {
     @State private var editingTemplate: Template?
     @FocusState private var focused: Bool
 
-    private enum Route: Hashable { case workout(UUID), exercise(UUID) }
 
     var body: some View {
         NavigationStack(path: $path) {
             Group {
                 if let session, !session.isEmpty {
-                    Conversation(session: session, openWorkout: { path.append(Route.workout($0)) },
-                                 openExercise: { path.append(Route.exercise($0)) },
+                    Conversation(session: session, openWorkout: { path.append(WorkoutRoute(id: $0)) },
+                                 openExercise: { path.append(ExerciseRoute(id: $0)) },
                                  editTemplate: { id in editingTemplate = try? app.db.writer.read { try Template.fetchOne($0, key: id) } })
                 } else {
                     MiloHome { suggestion in Task { await send(suggestion) } } open: { id in
@@ -66,12 +65,7 @@ struct MiloView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: Route.self) { route in
-                switch route {
-                case .workout(let id): WorkoutDetailView(workoutID: id)
-                case .exercise(let id): ExerciseDetailView(exerciseID: id)
-                }
-            }
+            .miloDestinations()
         }
         .presentationDragIndicator(.visible)
         .sheet(item: $editingTemplate) { TemplateEditor(template: $0) }

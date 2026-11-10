@@ -151,3 +151,102 @@ struct SessionTests {
         #expect(try db.writer.read { d in try Workout.fetchCount(d) } == 0)
     }
 }
+
+/// Logs one finished workout of `sets` (weight, reps) for an exercise.
+private func logWorkout(_ db: AppDatabase, _ e: Exercise, _ sets: [(String, Int)], daysAgo: Double) throws -> Workout {
+    let start = Date.now.addingTimeInterval(-daysAgo * 86400)
+    let w = try db.startWorkout(name: "Day", items: [TemplateItem(exerciseId: e.id, groupLabel: "")], now: start)
+    let we = try #require(try db.writer.read { d in try WorkoutExercise.filter(Column("workoutId") == w.id).fetchOne(d) })
+    try db.writer.write { d in try LoggedSet.filter(Column("workoutExerciseId") == we.id).deleteAll(d) }
+    for (i, (weight, reps)) in sets.enumerated() {
+        var s = try db.addSet(to: we.id, done: true, now: start)
+        s.weight = weight; s.reps = reps; s.unit = .kg; s.position = i + 1
+        try db.update(s, now: start)
+    }
+    try db.finishWorkout(w.id, name: "Day", notes: "", at: start.addingTimeInterval(3600), now: start.addingTimeInterval(3600))
+    return w
+}
+
+struct EditingTests {
+    @Test func deletingAWorkoutTombstonesEverythingInIt() throws {
+        let bench = exercise("Bench Press (Barbell)")
+        let db = try freshDB(bench)
+        let w = try logWorkout(db, bench, [("60", 8), ("60", 8)], daysAgo: 1)
+        try db.deleteWorkout(w.id)
+        #expect(try db.writer.read { d in try db.workoutDetail(d, id: w.id) } == nil)
+        #expect(try db.writer.read { d in try db.finishedWorkouts(d) }.isEmpty)
+        let sets = try db.writer.read { d in try LoggedSet.fetchAll(d) }
+        #expect(!sets.isEmpty && sets.allSatisfy { $0.deleted && $0.dirty })
+    }
+
+    @Test func doItAgainCopiesExercisesNotTicks() throws {
+        let bench = exercise("Bench Press (Barbell)")
+        let db = try freshDB(bench)
+        let past = try logWorkout(db, bench, [("60", 8)], daysAgo: 2)
+        let again = try db.startWorkout(name: "Day", items: try db.items(ofWorkout: past.id))
+        let entry = try #require(try db.writer.read { d in try db.workoutDetail(d, id: again.id) }?.entries.first)
+        #expect(entry.exercise.id == bench.id)
+        #expect(entry.sets.map(\.weight) == ["60"] && entry.sets.allSatisfy { !$0.done })
+    }
+
+    @Test func editingAPastWorkoutKeepsItsEndTime() throws {
+        let bench = exercise("Bench Press (Barbell)")
+        let db = try freshDB(bench)
+        let w = try logWorkout(db, bench, [("60", 8)], daysAgo: 3)
+        let before = try #require(try db.writer.read { d in try Workout.fetchOne(d, key: w.id) })
+        try db.finishWorkout(w.id, name: before.name, notes: "felt strong", at: try #require(before.endedAt))
+        let after = try #require(try db.writer.read { d in try Workout.fetchOne(d, key: w.id) })
+        #expect(after.endedAt == before.endedAt)
+        #expect(after.updatedAt > before.updatedAt)
+        #expect(after.notes == "felt strong")
+    }
+
+    @Test func heaviestYetAndEarlierTop() throws {
+        let bench = exercise("Bench Press (Barbell)")
+        let db = try freshDB(bench)
+        _ = try logWorkout(db, bench, [("60", 8)], daysAgo: 3)
+        let heavier = try logWorkout(db, bench, [("62.5", 6), ("65", 5), ("65", 4)], daysAgo: 2)
+        let lighter = try logWorkout(db, bench, [("55", 10)], daysAgo: 1)
+
+        let up = try #require(try db.writer.read { d in try db.workoutDetail(d, id: heavier.id) })
+        let upInsight = try db.writer.read { d in try db.insights(d, for: up) }
+        let topSet = up.entries[0].sets.first { $0.weight == "65" }
+        #expect(upInsight[up.entries[0].id]?.heaviestSet == topSet?.id)
+
+        let down = try #require(try db.writer.read { d in try db.workoutDetail(d, id: lighter.id) })
+        let downInsight = try #require(try db.writer.read { d in try db.insights(d, for: down) }[down.entries[0].id])
+        #expect(downInsight.heaviestSet == nil)
+        #expect(downInsight.earlierTop?.weight == "65")
+    }
+
+    @Test func companionsAreExercisesDoneTogether() throws {
+        let bench = exercise("Bench Press (Barbell)"), fly = exercise("Cable Fly"), squat = exercise("Squat (Barbell)")
+        let db = try freshDB(bench, fly, squat)
+        let w = try db.startWorkout(name: "Push", items: [bench, fly].map { TemplateItem(exerciseId: $0.id, groupLabel: "") })
+        try db.writer.write { d in try d.execute(sql: "UPDATE loggedSet SET done = 1") }
+        try db.finishWorkout(w.id, name: "Push", notes: "")
+        _ = try db.startWorkout(name: "Legs", items: [TemplateItem(exerciseId: squat.id, groupLabel: "")])
+        let found = try db.writer.read { d in try db.companions(d, of: [bench.id]) }
+        #expect(found.map(\.id) == [fly.id])
+    }
+
+    @Test func deletedOwnExerciseStaysInPastWorkouts() throws {
+        let db = try freshDB()
+        let mine = try db.createExercise(name: "Landmine Rotation (Barbell)", equipment: "barbell", measurement: .repsLoad, unilateral: true)
+        let w = try logWorkout(db, mine, [("20", 12)], daysAgo: 1)
+        try db.deleteExercise(mine.id)
+        #expect(try db.writer.read { d in try db.allExercises(d) }.isEmpty)
+        let entry = try db.writer.read { d in try db.workoutDetail(d, id: w.id) }?.entries.first
+        #expect(entry?.exercise.name == "Landmine Rotation (Barbell)")
+    }
+}
+
+struct SupersetLabelTests {
+    @Test func lettersNeighboursInAGroup() {
+        #expect(Superset.labels(["", "", "g", "g"]) == ["1", "2", "3a", "3b"])
+        #expect(Superset.labels(["a", "a", "a", ""]) == ["1a", "1b", "1c", "2"])
+        // Not neighbours, so not a superset.
+        #expect(Superset.labels(["g", "", "g"]) == ["1", "2", "3"])
+        #expect(Superset.labels([]) == [])
+    }
+}

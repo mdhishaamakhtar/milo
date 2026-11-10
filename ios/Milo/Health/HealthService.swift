@@ -105,6 +105,16 @@ final class HealthService {
         }
     }
 
+    /// Takes a deleted workout out of Health too.
+    func remove(_ healthUUID: UUID?) async {
+        guard connected, let healthUUID else { return }
+        do {
+            if let existing = try await workout(healthUUID) { try await store.delete(existing) }
+        } catch {
+            log.error("health remove: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private static var configuration: HKWorkoutConfiguration {
         let c = HKWorkoutConfiguration()
         c.activityType = .traditionalStrengthTraining
