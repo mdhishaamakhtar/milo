@@ -37,7 +37,7 @@ func NewAPI(t testing.TB, cfg config.Config, model agent.Model) *API {
 	pool, _ := DB(t)
 	cfg.InviteCode = InviteCode
 	if cfg.Model == "" {
-		cfg.Model = "claude-opus-5-5"
+		cfg.Model = config.DefaultModel
 	}
 	srv := httptest.NewServer(server.New(server.Deps{Config: cfg, Pool: pool, Logger: slog.New(slog.DiscardHandler), Model: model}))
 	t.Cleanup(srv.Close)

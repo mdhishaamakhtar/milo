@@ -59,7 +59,7 @@ func (f *fakeModel) Stream(_ context.Context, p anthropic.MessageNewParams, onTe
 func message(t *testing.T, stop string, content ...map[string]any) *anthropic.Message {
 	t.Helper()
 	raw, _ := json.Marshal(map[string]any{
-		"id": "msg_" + uuid.NewString(), "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+		"id": "msg_" + uuid.NewString(), "type": "message", "role": "assistant", "model": "claude-haiku-5-5",
 		"content": content, "stop_reason": stop, "usage": map[string]any{"input_tokens": 100, "output_tokens": 20},
 	})
 	var m anthropic.Message

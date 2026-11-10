@@ -28,12 +28,13 @@ func TestLiveEvals(t *testing.T) {
 	if key == "" {
 		t.Fatal("no API key")
 	}
-	env := testkit.NewAPI(t, config.Config{Model: "claude-opus-5-5"}, agent.NewAnthropicModel(key))
+	env := testkit.NewAPI(t, config.Config{}, agent.NewAnthropicModel(key))
 	ctx, userID := env.SignUp(t, "hishaam")
 	defer func() {
 		var in, out, cr, cw int64
 		_ = env.Pool.QueryRow(context.Background(), "SELECT COALESCE(sum(input_tokens),0), COALESCE(sum(output_tokens),0), COALESCE(sum(cache_read_tokens),0), COALESCE(sum(cache_write_tokens),0) FROM agent_usage WHERE user_id = $1", userID).Scan(&in, &out, &cr, &cw)
-		cost := float64(in)*4/1e6 + float64(out)*20/1e6 + float64(cr)*0.2/1e6 + float64(cw)*5/1e6
+		// Claude Haiku 5.5 prices per million tokens, for prompts up to 100K.
+		cost := float64(in)*0.10/1e6 + float64(out)*0.50/1e6 + float64(cr)*0.01/1e6 + float64(cw)*0.125/1e6
 		t.Logf("usage: %d in, %d out, %d cache read, %d cache write ≈ $%.3f", in, out, cr, cw, cost)
 	}()
 

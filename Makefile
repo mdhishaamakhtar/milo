@@ -25,7 +25,7 @@ test:  ## Backend tests (Testcontainers starts Postgres; Docker must be running)
 run:   ## Run the API on :8080 with the repo-root .env
 	cd backend && go run ./cmd/api
 
-live:  ## Milo against the real Claude API (needs a key in .env; costs about 40 cents)
+live:  ## Milo against the real Claude API (needs a key in .env; costs about a cent)
 	cd backend && MILO_LIVE=1 go test ./internal/agent/ -run TestLiveEvals -v
 
 ios:   ## Generate the Xcode project and open it

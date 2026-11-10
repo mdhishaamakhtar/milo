@@ -98,6 +98,6 @@ The phone needs no change unless you add a card kind: it applies any rows.
 ## Talking to the real model
 
 `make live` runs Milo against the Claude API with the key in your `.env`. It
-costs about 40 cents, so run it when you change the prompt or a tool's
+costs about a cent, so run it when you change the prompt or a tool's
 description, not on every commit. It prints what Milo said and the cards it
 made; read them, since a passing check can still be a clumsy answer.

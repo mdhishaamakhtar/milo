@@ -21,7 +21,7 @@ settings:
     Debug:
       MILO_API_URL: "http://localhost:8080"
     Release:
-      MILO_API_URL: "https://milo-api.up.railway.app"
+      MILO_API_URL: "https://api.milo.hishaam.dev"
 packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift

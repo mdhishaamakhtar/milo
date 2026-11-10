@@ -10,6 +10,9 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// DefaultModel is the Claude model Milo runs on unless MILO_MODEL says otherwise.
+const DefaultModel = "claude-haiku-5-5"
+
 type Config struct {
 	DatabaseURL   string
 	AnthropicKey  string
@@ -31,7 +34,7 @@ func Load() (Config, error) {
 		AnthropicKey:  firstNonEmpty(os.Getenv("ANTHROPIC_API_KEY_MILO"), os.Getenv("ANTHROPIC_API_KEY")),
 		Port:          firstNonEmpty(os.Getenv("PORT"), "8080"),
 		DailyTokenCap: 3_000_000,
-		Model:         firstNonEmpty(os.Getenv("MILO_MODEL"), "claude-opus-5-5"),
+		Model:         firstNonEmpty(os.Getenv("MILO_MODEL"), DefaultModel),
 		InviteCode:    os.Getenv("MILO_INVITE_CODE"),
 	}
 	if c.DatabaseURL == "" {

@@ -35,7 +35,7 @@ Think: "Start my pull day, I did rows at 60 for 8 and 8" or "What have I neglect
 [![Protobuf](https://img.shields.io/badge/Protobuf-Buf-151FD5?style=for-the-badge&logo=buf&logoColor=white)](https://buf.build/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![sqlc](https://img.shields.io/badge/sqlc-Typed_SQL-4B5563?style=for-the-badge)](https://sqlc.dev/)
-[![Claude](https://img.shields.io/badge/Claude-Opus_5.5-D97757?style=for-the-badge&logo=claude&logoColor=white)](https://www.anthropic.com/claude)
+[![Claude](https://img.shields.io/badge/Claude-Haiku_5.5-D97757?style=for-the-badge&logo=claude&logoColor=white)](https://www.anthropic.com/claude)
 [![Testcontainers](https://img.shields.io/badge/Testcontainers-Go-17A6B2?style=for-the-badge&logo=docker&logoColor=white)](https://golang.testcontainers.org/)
 
 ## Quick Start
@@ -102,7 +102,7 @@ This generates `ios/Milo.xcodeproj` and opens it. Pick an iPhone simulator and p
 | `make ios` | root | Generate the Xcode project and open it |
 | `make ios-test` | root | App tests on a simulator |
 | `make lint` | root | `buf lint` and `go vet` |
-| `make live` | root | Milo against the real Claude API (needs a key; costs about 40 cents) |
+| `make live` | root | Milo against the real Claude API (needs a key; costs about a cent) |
 
 ## Project Structure
 
