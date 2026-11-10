@@ -1,0 +1,10 @@
+[
+  {"name": "reps_load 45 lb at 120.8 kg", "input": {"measurement": "reps_load", "weight": "45", "unit": "lb", "body_kg": 120.8}, "expected": {"load_kg": 20.411657}},
+  {"name": "bodyweight no weight kg at 120.8 kg", "input": {"measurement": "bodyweight", "weight": "", "unit": "kg", "body_kg": 120.8}, "expected": {"load_kg": 120.8}},
+  {"name": "bodyweight 10 kg at 120.8 kg", "input": {"measurement": "bodyweight", "weight": "10", "unit": "kg", "body_kg": 120.8}, "expected": {"load_kg": 130.8}},
+  {"name": "assisted 90 kg at 120.8 kg", "input": {"measurement": "assisted", "weight": "90", "unit": "kg", "body_kg": 120.8}, "expected": {"load_kg": 30.8}},
+  {"name": "assisted 90 kg at unknown kg", "input": {"measurement": "assisted", "weight": "90", "unit": "kg", "body_kg": 0}, "expected": {"load_kg": null}},
+  {"name": "assisted 150 kg at 120.8 kg", "input": {"measurement": "assisted", "weight": "150", "unit": "kg", "body_kg": 120.8}, "expected": {"load_kg": 0.0}},
+  {"name": "timed no weight kg at 120.8 kg", "input": {"measurement": "timed", "weight": "", "unit": "kg", "body_kg": 120.8}, "expected": {"load_kg": null}},
+  {"name": "reps_load no weight kg at 120.8 kg", "input": {"measurement": "reps_load", "weight": "", "unit": "kg", "body_kg": 120.8}, "expected": {"load_kg": null}}
+]

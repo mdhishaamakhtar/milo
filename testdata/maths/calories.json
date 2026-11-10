@@ -1,0 +1,7 @@
+[
+  {"name": "44 minutes at 120.8 kg, one exercise at MET 5", "input": {"duration_s": 2640, "body_kg": 120.8, "exercises": [{"met": 5.0, "done_sets": 12}]}, "expected": {"kcal": 354.35}},
+  {"name": "an hour at 80 kg split between MET 3.5 and MET 6", "input": {"duration_s": 3600, "body_kg": 80, "exercises": [{"met": 3.5, "done_sets": 6}, {"met": 6.0, "done_sets": 6}]}, "expected": {"kcal": 300.0}},
+  {"name": "missing MET uses 5", "input": {"duration_s": 1800, "body_kg": 100, "exercises": [{"met": null, "done_sets": 3}]}, "expected": {"kcal": 200.0}},
+  {"name": "no body weight means no estimate", "input": {"duration_s": 3600, "body_kg": 0, "exercises": [{"met": 5.0, "done_sets": 3}]}, "expected": {"kcal": null}},
+  {"name": "no done sets means no estimate", "input": {"duration_s": 3600, "body_kg": 80, "exercises": [{"met": 5.0, "done_sets": 0}]}, "expected": {"kcal": null}}
+]

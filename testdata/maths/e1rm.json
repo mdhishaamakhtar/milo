@@ -1,0 +1,10 @@
+[
+  {"name": "60 kg x 7", "input": {"load_kg": 60, "reps": 7}, "expected": {"e1rm_kg": 74.0}},
+  {"name": "100 kg x 1", "input": {"load_kg": 100, "reps": 1}, "expected": {"e1rm_kg": 100.0}},
+  {"name": "45 kg x 10", "input": {"load_kg": 45, "reps": 10}, "expected": {"e1rm_kg": 60.0}},
+  {"name": "30 kg x 12", "input": {"load_kg": 30, "reps": 12}, "expected": {"e1rm_kg": 42.0}},
+  {"name": "30 kg x 13", "input": {"load_kg": 30, "reps": 13}, "expected": {"e1rm_kg": null}},
+  {"name": "30 kg x 15", "input": {"load_kg": 30, "reps": 15}, "expected": {"e1rm_kg": null}},
+  {"name": "50 kg x 0", "input": {"load_kg": 50, "reps": 0}, "expected": {"e1rm_kg": null}},
+  {"name": "0 kg x 5", "input": {"load_kg": 0, "reps": 5}, "expected": {"e1rm_kg": null}}
+]
