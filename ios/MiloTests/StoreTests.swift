@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import MiloAPI
+import SwiftProtobuf
 import Testing
 @testable import Milo
 
@@ -273,5 +274,26 @@ struct ExportTests {
         let workouts = json?["workouts"] as? [[String: Any]]
         #expect(workouts?.count == 1)
         #expect(json?["display_unit"] as? String == "kg")
+    }
+}
+
+struct ChatGroupTests {
+    @Test func groupsByDayThenMonth() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let now = Date(timeIntervalSince1970: 1_794_300_000) // 10 November 2026
+        func chat(_ title: String, daysAgo: Double) -> Milo_Conversation {
+            var c = Milo_Conversation()
+            c.id = title
+            c.title = title
+            c.updatedAt = .init(date: now.addingTimeInterval(-daysAgo * 86400))
+            return c
+        }
+        let groups = ChatGroup.groups(
+            [chat("old", daysAgo: 40), chat("today", daysAgo: 0.1), chat("yesterday", daysAgo: 1), chat("monday", daysAgo: 4), chat("also today", daysAgo: 0.2)],
+            now: now, calendar: calendar)
+        #expect(groups.map(\.title) == ["Today", "Yesterday", "Earlier this week", "October 2026"])
+        #expect(groups[0].chats.map(\.title) == ["today", "also today"])
+        #expect(groups[0].showsTime && !groups[2].showsTime)
     }
 }

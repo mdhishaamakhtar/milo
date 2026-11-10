@@ -106,6 +106,9 @@ targets:
         buildPhase: resources
     dependencies:
       - target: Milo
+      - target: MiloAPI
+      - package: SwiftProtobuf
+        product: SwiftProtobuf
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
