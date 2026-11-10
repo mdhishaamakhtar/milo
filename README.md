@@ -117,7 +117,7 @@ This is a **monorepo** with one contract shared by the server and the app:
 
 - [docs/architecture.md](./docs/architecture.md): how it works, in four ideas (one contract, the phone owns the log, Milo proposes and the phone applies, maths tested once)
 - [CONTRIBUTING.md](./CONTRIBUTING.md): conventions, and recipes for the common changes
-- [docs/brand](./docs/brand): the mark and the social preview
+- [docs/brand](./docs/brand): the mark and the social preview (the SVG is its source; it is set in Sofia Sans)
 
 ## Licence
 
