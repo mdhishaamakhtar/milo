@@ -17,6 +17,7 @@ import (
 	milov1 "github.com/mdhishaamakhtar/milo/backend/gen/milo/v1"
 	"github.com/mdhishaamakhtar/milo/backend/gen/milo/v1/milov1connect"
 	"github.com/mdhishaamakhtar/milo/backend/internal/config"
+	"github.com/mdhishaamakhtar/milo/backend/internal/milo"
 	"github.com/mdhishaamakhtar/milo/backend/internal/server"
 	"github.com/mdhishaamakhtar/milo/backend/internal/testdb"
 )
@@ -34,9 +35,18 @@ type Env struct {
 // New starts the API on a fresh database. cfg may be zero; its invite code is always InviteCode.
 func New(t testing.TB, cfg config.Config) *Env {
 	t.Helper()
+	return NewWithModel(t, cfg, nil)
+}
+
+// NewWithModel is New with Milo talking to model instead of the Claude API.
+func NewWithModel(t testing.TB, cfg config.Config, model milo.Model) *Env {
+	t.Helper()
 	pool := testdb.New(t)
 	cfg.InviteCode = InviteCode
-	srv := httptest.NewServer(server.New(server.Deps{Config: cfg, Pool: pool, Logger: slog.New(slog.DiscardHandler)}))
+	if cfg.Model == "" {
+		cfg.Model = "claude-opus-5-5"
+	}
+	srv := httptest.NewServer(server.New(server.Deps{Config: cfg, Pool: pool, Logger: slog.New(slog.DiscardHandler), MiloModel: model}))
 	t.Cleanup(srv.Close)
 	c := connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL))
 	return &Env{

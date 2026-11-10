@@ -15,6 +15,7 @@ import (
 	"github.com/mdhishaamakhtar/milo/backend/internal/auth"
 	"github.com/mdhishaamakhtar/milo/backend/internal/config"
 	"github.com/mdhishaamakhtar/milo/backend/internal/db/dbq"
+	"github.com/mdhishaamakhtar/milo/backend/internal/milo"
 	"github.com/mdhishaamakhtar/milo/backend/internal/syncsvc"
 )
 
@@ -25,6 +26,8 @@ type Deps struct {
 	Logger *slog.Logger
 	// Now defaults to time.Now.
 	Now func() time.Time
+	// MiloModel replaces the Claude API (tests). When nil, the API key in Config is used.
+	MiloModel milo.Model
 }
 
 // New returns the API's root handler.
@@ -37,6 +40,14 @@ func New(d Deps) http.Handler {
 	rpc := connect.NewServer(auth.NewInterceptor(q, d.Now))
 	milov1connect.RegisterAuthServiceHandler(rpc, auth.NewService(d.Pool, d.Config.InviteCode, d.Now))
 	milov1connect.RegisterSyncServiceHandler(rpc, syncsvc.NewService(d.Pool))
+
+	model := d.MiloModel
+	if model == nil && d.Config.AnthropicKey != "" {
+		model = milo.NewAnthropicModel(d.Config.AnthropicKey)
+	}
+	milov1connect.RegisterMiloServiceHandler(rpc, milo.NewService(d.Pool, milo.Options{
+		Model: model, ModelName: d.Config.Model, DailyTokenCap: d.Config.DailyTokenCap, Now: d.Now, Logger: d.Logger,
+	}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz(d.Pool))

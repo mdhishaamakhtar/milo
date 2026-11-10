@@ -24,6 +24,8 @@ message MiloContext {
   string exercise_id = 3;
   // ISO date the user is looking at, if any.
   string date = 4;
+  // The phone's IANA time zone, e.g. "Asia/Kolkata", so "yesterday" means the user's yesterday.
+  string timezone = 5;
 }
 
 message SendRequest {

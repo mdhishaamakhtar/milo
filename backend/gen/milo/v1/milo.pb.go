@@ -152,7 +152,9 @@ type MiloContext struct {
 	WorkoutId  string `protobuf:"bytes,2,opt,name=workout_id,json=workoutId,proto3" json:"workout_id,omitempty"`
 	ExerciseId string `protobuf:"bytes,3,opt,name=exercise_id,json=exerciseId,proto3" json:"exercise_id,omitempty"`
 	// ISO date the user is looking at, if any.
-	Date          string `protobuf:"bytes,4,opt,name=date,proto3" json:"date,omitempty"`
+	Date string `protobuf:"bytes,4,opt,name=date,proto3" json:"date,omitempty"`
+	// The phone's IANA time zone, e.g. "Asia/Kolkata", so "yesterday" means the user's yesterday.
+	Timezone      string `protobuf:"bytes,5,opt,name=timezone,proto3" json:"timezone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -211,6 +213,13 @@ func (x *MiloContext) GetExerciseId() string {
 func (x *MiloContext) GetDate() string {
 	if x != nil {
 		return x.Date
+	}
+	return ""
+}
+
+func (x *MiloContext) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
 	}
 	return ""
 }
@@ -1408,14 +1417,15 @@ var File_milo_v1_milo_proto protoreflect.FileDescriptor
 
 const file_milo_v1_milo_proto_rawDesc = "" +
 	"\n" +
-	"\x12milo/v1/milo.proto\x12\amilo.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14milo/v1/common.proto\"y\n" +
+	"\x12milo/v1/milo.proto\x12\amilo.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14milo/v1/common.proto\"\x95\x01\n" +
 	"\vMiloContext\x12\x16\n" +
 	"\x06screen\x18\x01 \x01(\tR\x06screen\x12\x1d\n" +
 	"\n" +
 	"workout_id\x18\x02 \x01(\tR\tworkoutId\x12\x1f\n" +
 	"\vexercise_id\x18\x03 \x01(\tR\n" +
 	"exerciseId\x12\x12\n" +
-	"\x04date\x18\x04 \x01(\tR\x04date\"z\n" +
+	"\x04date\x18\x04 \x01(\tR\x04date\x12\x1a\n" +
+	"\btimezone\x18\x05 \x01(\tR\btimezone\"z\n" +
 	"\vSendRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12.\n" +

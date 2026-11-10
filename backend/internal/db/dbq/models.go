@@ -22,7 +22,7 @@ type AgentMessage struct {
 
 type AgentUsage struct {
 	UserID           uuid.UUID
-	Day              pgtype.Date
+	Day              time.Time
 	InputTokens      int64
 	OutputTokens     int64
 	CacheReadTokens  int64
@@ -124,7 +124,7 @@ type Setting struct {
 	DisplayUnit  string
 	RestDefaultS int32
 	HeightCm     *float64
-	BirthDate    pgtype.Date
+	BirthDate    *time.Time
 	Sex          string
 	UpdatedAt    time.Time
 	ServerSeq    int64

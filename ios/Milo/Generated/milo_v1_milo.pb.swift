@@ -148,6 +148,9 @@ nonisolated struct Milo_V1_MiloContext: Sendable {
   /// ISO date the user is looking at, if any.
   var date: String = String()
 
+  /// The phone's IANA time zone, e.g. "Asia/Kolkata", so "yesterday" means the user's yesterday.
+  var timezone: String = String()
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -629,7 +632,7 @@ nonisolated extension Milo_V1_CardStatus: SwiftProtobuf._ProtoNameProviding {
 
 nonisolated extension Milo_V1_MiloContext: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".MiloContext"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}screen\0\u{3}workout_id\0\u{3}exercise_id\0\u{1}date\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}screen\0\u{3}workout_id\0\u{3}exercise_id\0\u{1}date\0\u{1}timezone\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -641,6 +644,7 @@ nonisolated extension Milo_V1_MiloContext: SwiftProtobuf.Message, SwiftProtobuf.
       case 2: try { try decoder.decodeSingularStringField(value: &self.workoutID) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.exerciseID) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.date) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.timezone) }()
       default: break
       }
     }
@@ -659,6 +663,9 @@ nonisolated extension Milo_V1_MiloContext: SwiftProtobuf.Message, SwiftProtobuf.
     if !self.date.isEmpty {
       try visitor.visitSingularStringField(value: self.date, fieldNumber: 4)
     }
+    if !self.timezone.isEmpty {
+      try visitor.visitSingularStringField(value: self.timezone, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -667,6 +674,7 @@ nonisolated extension Milo_V1_MiloContext: SwiftProtobuf.Message, SwiftProtobuf.
     if lhs.workoutID != rhs.workoutID {return false}
     if lhs.exerciseID != rhs.exerciseID {return false}
     if lhs.date != rhs.date {return false}
+    if lhs.timezone != rhs.timezone {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
