@@ -114,4 +114,18 @@ nonisolated enum Format {
     static func shortDay(_ date: Date) -> String {
         date.formatted(.dateTime.day().month(.abbreviated))
     }
+
+    /// "Chest, triceps, front shoulders" from the library's muscle names.
+    static func muscles(_ list: [String]) -> String {
+        let names = list.map { m in
+            switch m {
+            case "front delts": "front shoulders"
+            case "side delts": "side shoulders"
+            case "rear delts": "rear shoulders"
+            default: m
+            }
+        }
+        guard let first = names.first else { return "" }
+        return ([first.prefix(1).uppercased() + first.dropFirst()] + names.dropFirst()).joined(separator: ", ")
+    }
 }

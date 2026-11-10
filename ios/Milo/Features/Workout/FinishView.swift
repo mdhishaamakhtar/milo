@@ -32,7 +32,10 @@ struct FinishView: View {
                             .font(.sub).foregroundStyle(Color.tx2).padding(.horizontal, 4)
                     }
                     VStack(spacing: 0) {
-                        toggleRow("heart", "Save to Apple Health", detail: kcalText(detail), isOn: $saveToHealth)
+                        toggleRow("heart", "Save to Apple Health", detail: app.health.connected ? kcalText(detail) : "Turning this on connects Apple Health.", isOn: $saveToHealth)
+                            .onChange(of: saveToHealth) { _, on in
+                                if on && !app.health.connected { Task { await app.health.connect() } }
+                            }
                         Divider().overlay(Color.line).padding(.leading, 60)
                         toggleRow("list.bullet", "Save as a template", detail: nil, isOn: $saveTemplate)
                     }
@@ -71,6 +74,7 @@ struct FinishView: View {
             .onAppear {
                 name = detail.workout.name
                 note = detail.workout.notes
+                saveToHealth = app.health.connected && app.health.writeWorkouts
                 bodyKg = try? app.db.writer.read { try app.db.latestBodyKg($0) }
             }
         }

@@ -44,16 +44,10 @@ struct TemplateEditor: View {
             .navigationTitle(isNew ? "New template" : "Edit template")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { if hasChanges { confirmingCancel = true } else { dismiss() } }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save)
-                        .buttonStyle(.glassProminent)
-                        .tint(Color.tx)
-                        .foregroundStyle(Color.bg)
-                        .disabled(trimmedName.isEmpty || template.items.isEmpty)
-                }
+                SheetToolbar(
+                    canSave: !trimmedName.isEmpty && !template.items.isEmpty,
+                    cancel: { if hasChanges { confirmingCancel = true } else { dismiss() } },
+                    save: save)
             }
             .confirmationDialog("Discard your changes?", isPresented: $confirmingCancel, titleVisibility: .visible) {
                 Button("Discard changes", role: .destructive) { dismiss() }

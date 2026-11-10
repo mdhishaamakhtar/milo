@@ -29,6 +29,19 @@ struct ExerciseCard: View {
 
             grid.padding(.top, 18)
 
+            if let tip = unitTip {
+                HStack(alignment: .top, spacing: 14) {
+                    Text(tip).font(.sofia(15, .bold)).fixedSize()
+                    Text("Tap \(display.rawValue) and every number converts. Milo remembers \(entry.unit == .lb ? "pounds" : "kilograms") for this exercise.")
+                        .font(.sofia(13.5)).foregroundStyle(Color.tx2)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.well, in: .rect(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.line))
+                .padding(.top, 14)
+            }
+
             HStack(spacing: 8) {
                 Button { model.addSet(to: entry) } label: { Label("Set", systemImage: "plus") }
                 Button { noting.toggle(); note = entry.we.notes } label: { Label("Note", systemImage: "line.3.horizontal") }
@@ -62,10 +75,22 @@ struct ExerciseCard: View {
         .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
     }
 
+    private var display: WeightUnit { model.settings.value.displayUnit }
+
     private var subtitle: String {
         let equipment = entry.exercise.equipmentLabel
-        if let last = entry.lastDate { return "\(equipment). Filled in from \(Format.shortDay(last))." }
-        return equipment.isEmpty ? "First time" : "\(equipment). First time."
+        let lead = equipment.isEmpty ? "" : "\(equipment). "
+        if hasWeight && entry.unit != display { return lead + (entry.unit == .lb ? "Logged in pounds." : "Logged in kilograms.") }
+        if let last = entry.lastDate { return lead + "Filled in from \(Format.shortDay(last))." }
+        return lead + "First time."
+    }
+
+    /// "45 lb = 20.4 kg" for an exercise lifted in the other unit.
+    private var unitTip: String? {
+        guard hasWeight, entry.unit != display,
+              let top = entry.sets.max(by: { (Maths.toKg($0.weight, $0.unit) ?? 0) < (Maths.toKg($1.weight, $1.unit) ?? 0) }),
+              !top.weight.isEmpty else { return nil }
+        return "\(Format.weight(top, in: entry.unit)) \(entry.unit.rawValue) = \(Format.weight(top, in: display)) \(display.rawValue)"
     }
 
     private func saveNote() {

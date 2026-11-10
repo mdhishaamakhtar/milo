@@ -14,10 +14,16 @@ struct ExerciseForm: View {
     @State private var equipment = "barbell"
     @State private var measurement = MeasurementKind.repsLoad
     @State private var unilateral = false
+    @State private var muscle = ""
     @FocusState private var naming: Bool
 
-    /// The built-in library's equipment, so your own sort and name the same way.
+    /// The built-in library's equipment and muscles, so your own sort and filter the same way.
     static let equipment = ["barbell", "dumbbell", "machine", "cable", "smith machine", "kettlebell", "bodyweight", "plate", "other"]
+    static let muscles = [
+        "chest", "lats", "upper back", "lower back", "traps", "front delts", "side delts", "rear delts",
+        "biceps", "triceps", "forearms", "abs", "obliques", "quads", "hamstrings", "glutes", "calves",
+        "adductors", "abductors", "hip flexors",
+    ]
 
     private var base: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -28,7 +34,7 @@ struct ExerciseForm: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MiloForm {
                 Section {
                     TextField("Name, e.g. Landmine Rotation", text: $name)
                         .focused($naming)
@@ -39,6 +45,10 @@ struct ExerciseForm: View {
                 Section {
                     Picker("Equipment", selection: $equipment) {
                         ForEach(Self.equipment, id: \.self) { Text($0.capitalized).tag($0) }
+                    }
+                    Picker("Mainly works", selection: $muscle) {
+                        Text("Not set").tag("")
+                        ForEach(Self.muscles, id: \.self) { Text(Format.muscles([$0])).tag($0) }
                     }
                     Picker("Logged as", selection: $measurement) {
                         Text("Weight and reps").tag(MeasurementKind.repsLoad)
@@ -52,17 +62,9 @@ struct ExerciseForm: View {
                     Text("One side at a time logs each set per side, like 20 kg × 12 each side.")
                 }
             }
-            .font(.body16)
-            .scrollContentBackground(.hidden)
-            .miloScreen()
             .navigationTitle(exercise == nil ? "New exercise" : "Edit exercise")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save).disabled(base.isEmpty)
-                }
-            }
+            .toolbar { SheetToolbar(canSave: !base.isEmpty, cancel: { dismiss() }, save: save) }
             .onAppear(perform: load)
         }
     }
@@ -73,6 +75,7 @@ struct ExerciseForm: View {
             equipment = Self.equipment.contains(e.equipment) ? e.equipment : "other"
             measurement = e.measurement
             unilateral = e.unilateral
+            muscle = e.primaryMuscles.first ?? ""
         } else {
             name = suggestedName
             naming = true
@@ -86,10 +89,13 @@ struct ExerciseForm: View {
                 e.equipment = equipment
                 e.measurement = measurement
                 e.unilateral = unilateral
+                e.primaryMuscles = (muscle.isEmpty ? [] : [muscle]) + e.primaryMuscles.dropFirst().filter { $0 != muscle }
                 try app.db.save(e)
                 onSave(e)
             } else {
-                onSave(try app.db.createExercise(name: fullName, equipment: equipment, measurement: measurement, unilateral: unilateral))
+                onSave(try app.db.createExercise(
+                    name: fullName, equipment: equipment, measurement: measurement, unilateral: unilateral,
+                    primaryMuscles: muscle.isEmpty ? [] : [muscle]))
             }
             app.edited()
             dismiss()

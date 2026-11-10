@@ -37,7 +37,12 @@ struct RootView: View {
         .animation(.smooth, value: app.session.isSignedIn)
         .task(id: app.session.isSignedIn) { await app.sync.sync() }
         .onChange(of: phase) { _, now in
-            if now == .active { Task { await app.sync.sync() } }
+            if now == .active {
+                Task {
+                    await app.health.importBody()
+                    await app.sync.sync()
+                }
+            }
         }
     }
 }

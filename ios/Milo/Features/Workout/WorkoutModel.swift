@@ -12,6 +12,7 @@ final class WorkoutModel {
     /// nil follows the running workout; an id edits that finished one.
     let workoutID: UUID?
     let detail = Live<WorkoutDetail?>(nil)
+    let settings = Live(UserSettings.fresh)
 
     /// The exercise shown open; nil means the first one not finished.
     var openID: UUID?
@@ -44,6 +45,7 @@ final class WorkoutModel {
             guard let id = try workoutID ?? db.runningWorkout(d)?.id else { return nil }
             return try db.workoutDetail(d, id: id)
         }
+        settings.watch(db) { try db.settings($0) }
     }
 
     /// Editing a finished workout: new sets count as done and there's no rest timer.
@@ -72,7 +74,7 @@ final class WorkoutModel {
             app.edited()
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             if done && !isPast {
-                let rest = entry.restS ?? (try? app.db.writer.read { try app.db.settings($0) })?.restDefaultS ?? 60
+                let rest = entry.restS ?? settings.value.restDefaultS
                 startRest(seconds: rest, nextSet: (entry.sets.firstIndex { $0.id == set.id } ?? 0) + 2)
                 if entry.sets.allSatisfy({ $0.id == set.id || $0.done }) { openID = nil }
             }

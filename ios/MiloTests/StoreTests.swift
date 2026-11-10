@@ -250,3 +250,24 @@ struct SupersetLabelTests {
         #expect(Superset.labels([]) == [])
     }
 }
+
+struct ExportTests {
+    @Test func csvHasOneRowPerDoneSet() throws {
+        let bench = exercise("Bench Press, \"Flat\" (Barbell)")
+        let db = try freshDB(bench)
+        _ = try logWorkout(db, bench, [("60", 8), ("62.5", 6)], daysAgo: 1)
+        let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let files = try Exporter.write(db, to: dir)
+
+        let lines = try String(contentsOf: files.csv, encoding: .utf8).split(separator: "\n")
+        #expect(lines.first == "date,workout,exercise,set,weight,unit,reps,seconds,metres,each_side")
+        #expect(lines.count == 3)
+        #expect(lines[1].contains("\"Bench Press, \"\"Flat\"\" (Barbell)\",1,60,kg,8"))
+
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: files.json)) as? [String: Any]
+        let workouts = json?["workouts"] as? [[String: Any]]
+        #expect(workouts?.count == 1)
+        #expect(json?["display_unit"] as? String == "kg")
+    }
+}

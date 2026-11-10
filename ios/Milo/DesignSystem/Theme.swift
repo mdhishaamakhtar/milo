@@ -237,3 +237,42 @@ struct UnitSwitch: View {
         .sensoryFeedback(.selection, trigger: unit)
     }
 }
+
+/// Milo's grouped form: the screen background with card-coloured rows, never the
+/// system greys.
+struct MiloForm<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        Form {
+            Group { content }
+                .listRowBackground(Color.s1)
+                .listRowSeparatorTint(Color.line)
+        }
+        .font(.body16)
+        .scrollContentBackground(.hidden)
+        .miloScreen()
+    }
+}
+
+/// Cancel and Save for a sheet, the way the canvas draws them: a quiet Cancel and an
+/// off-white Save.
+struct SheetToolbar: ToolbarContent {
+    var saveTitle = "Save"
+    var canSave = true
+    let cancel: () -> Void
+    let save: () -> Void
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel", action: cancel).tint(Color.tx)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+            Button(saveTitle, action: save)
+                .buttonStyle(.glassProminent)
+                .tint(Color.tx)
+                .foregroundStyle(Color.bg)
+                .disabled(!canSave)
+        }
+    }
+}

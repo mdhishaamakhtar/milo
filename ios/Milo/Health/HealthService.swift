@@ -13,11 +13,30 @@ final class HealthService {
     private(set) var connected: Bool
     private(set) var lastSaved: String?
 
+    // What Milo writes and reads, kept on this phone.
+    var writeWorkouts: Bool { didSet { store("writeWorkouts", writeWorkouts) } }
+    var writeEnergy: Bool { didSet { store("writeEnergy", writeEnergy) } }
+    var readWeight: Bool { didSet { store("readWeight", readWeight) } }
+    var readProfile: Bool { didSet { store("readProfile", readProfile) } }
+    var readBodyFat: Bool { didSet { store("readBodyFat", readBodyFat) } }
+
     private static let connectedKey = "health.connected"
 
     init(db: AppDatabase) {
         self.db = db
-        connected = UserDefaults.standard.bool(forKey: Self.connectedKey)
+        let d = UserDefaults.standard
+        connected = d.bool(forKey: Self.connectedKey)
+        lastSaved = d.string(forKey: "health.lastSaved")
+        func flag(_ key: String, _ fallback: Bool) -> Bool { d.object(forKey: "health." + key) as? Bool ?? fallback }
+        writeWorkouts = flag("writeWorkouts", true)
+        writeEnergy = flag("writeEnergy", true)
+        readWeight = flag("readWeight", true)
+        readProfile = flag("readProfile", true)
+        readBodyFat = flag("readBodyFat", false)
+    }
+
+    private func store(_ key: String, _ value: Bool) {
+        UserDefaults.standard.set(value, forKey: "health." + key)
     }
 
     var available: Bool { HKHealthStore.isHealthDataAvailable() }
@@ -45,11 +64,15 @@ final class HealthService {
         UserDefaults.standard.set(false, forKey: Self.connectedKey)
     }
 
-    /// Body weight and body fat from the last year, plus height, birth date and sex.
+    /// Body weight and body fat from the last year, plus height, birth date and sex,
+    /// as far as the reads are switched on.
     func importBody() async {
         guard connected else { return }
         let since = Calendar.current.date(byAdding: .year, value: -1, to: .now)!
-        for (type, unit) in [(HKQuantityType(.bodyMass), HKUnit.gramUnit(with: .kilo)), (HKQuantityType(.bodyFatPercentage), HKUnit.percent())] {
+        var types: [(HKQuantityType, HKUnit)] = []
+        if readWeight { types.append((HKQuantityType(.bodyMass), .gramUnit(with: .kilo))) }
+        if readBodyFat { types.append((HKQuantityType(.bodyFatPercentage), .percent())) }
+        for (type, unit) in types {
             let samples = (try? await quantities(type, since: since)) ?? []
             for s in samples {
                 let value = s.quantity.doubleValue(for: unit)
@@ -57,7 +80,9 @@ final class HealthService {
                 try? db.addBody(weightKg: isWeight ? value : nil, bodyFatPct: isWeight ? nil : value * 100, at: s.endDate, source: "health", id: s.uuid)
             }
         }
-        var settings = (try? await db.writer.read { try db.settings($0) }) ?? .fresh
+        guard readProfile else { return }
+        let before = (try? await db.writer.read { try db.settings($0) }) ?? .fresh
+        var settings = before
         if let height = try? await quantities(HKQuantityType(.height), since: .distantPast).last {
             settings.heightCm = height.quantity.doubleValue(for: .meterUnit(with: .centi))
         }
@@ -67,7 +92,7 @@ final class HealthService {
         if let sex = try? store.biologicalSex().biologicalSex {
             settings.sex = switch sex { case .female: "female"; case .male: "male"; case .other: "other"; default: settings.sex }
         }
-        try? db.save(settings)
+        if settings != before { try? db.save(settings) }
     }
 
     private func quantities(_ type: HKQuantityType, since: Date) async throws -> [HKQuantitySample] {
@@ -79,7 +104,7 @@ final class HealthService {
 
     /// Saves a finished workout. Saving again replaces the earlier Health workout.
     func save(workoutID: UUID) async {
-        guard connected else { return }
+        guard connected, writeWorkouts else { return }
         do {
             guard let detail = try await db.writer.read({ try db.workoutDetail($0, id: workoutID) }), let end = detail.workout.endedAt else { return }
             if let old = detail.workout.healthUUID, let existing = try? await workout(old) {
@@ -89,7 +114,7 @@ final class HealthService {
             try await builder.beginCollection(at: detail.workout.startedAt)
             let bodyKg = try await db.writer.read { try db.latestBodyKg($0, before: end) } ?? 0
             let shares = detail.entries.map { Maths.ExerciseShare(met: $0.exercise.met, doneSets: $0.doneSets.count) }
-            if let kcal = Maths.activeKcal(durationS: end.timeIntervalSince(detail.workout.startedAt), bodyKg: bodyKg, exercises: shares) {
+            if writeEnergy, let kcal = Maths.activeKcal(durationS: end.timeIntervalSince(detail.workout.startedAt), bodyKg: bodyKg, exercises: shares) {
                 let energy = HKQuantitySample(type: HKQuantityType(.activeEnergyBurned), quantity: HKQuantity(unit: .kilocalorie(), doubleValue: kcal), start: detail.workout.startedAt, end: end)
                 try await builder.addSamples([energy])
             }
@@ -100,6 +125,7 @@ final class HealthService {
             w.healthUUID = saved.uuid
             try db.save(w)
             lastSaved = "\(w.name), \(Format.day(w.startedAt))"
+            UserDefaults.standard.set(lastSaved, forKey: "health.lastSaved")
         } catch {
             log.error("health save: \(error.localizedDescription, privacy: .public)")
         }

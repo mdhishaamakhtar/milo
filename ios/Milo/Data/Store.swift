@@ -439,9 +439,20 @@ nonisolated extension AppDatabase {
         try writer.write { db in try s.save(db) }
     }
 
+    /// A weight or body-fat reading. One from Health keeps its Health id and is added only
+    /// once, so a reading deleted here doesn't come back on the next import.
     func addBody(weightKg: Double?, bodyFatPct: Double?, at: Date, source: String, id: UUID = UUID(), now: Date = Date()) throws {
         let m = BodyMeasurement(id: id, measuredAt: at, weightKg: weightKg, bodyFatPct: bodyFatPct, source: source, updatedAt: now, deleted: false, dirty: true)
-        try writer.write { db in try m.save(db) }
+        try writer.write { db in
+            if source == "health" { try m.insert(db, onConflict: .ignore) } else { try m.save(db) }
+        }
+    }
+
+    func deleteBody(_ id: UUID, now: Date = Date()) throws {
+        try writer.write { db in
+            guard let m = try BodyMeasurement.fetchOne(db, key: id) else { return }
+            try m.tombstone(at: now).save(db)
+        }
     }
 }
 
@@ -509,9 +520,9 @@ nonisolated extension AppDatabase {
 
     /// A new exercise of your own.
     @discardableResult
-    func createExercise(name: String, equipment: String, measurement: MeasurementKind, unilateral: Bool, now: Date = Date()) throws -> Exercise {
+    func createExercise(name: String, equipment: String, measurement: MeasurementKind, unilateral: Bool, primaryMuscles: [String] = [], now: Date = Date()) throws -> Exercise {
         let e = Exercise(
-            id: UUID(), builtin: false, name: name, aliases: [], primaryMuscles: [], secondaryMuscles: [],
+            id: UUID(), builtin: false, name: name, aliases: [], primaryMuscles: primaryMuscles, secondaryMuscles: [],
             movementPattern: "", equipment: equipment, measurement: measurement, unilateral: unilateral,
             met: nil, about: "", approximate: false, updatedAt: now, deleted: false, dirty: true)
         try writer.write { db in try e.save(db) }
