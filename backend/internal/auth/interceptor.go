@@ -3,14 +3,15 @@ package auth
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
-	"github.com/mdhishaamakhtar/milo/backend/gen/milo/v1/milov1connect"
-	"github.com/mdhishaamakhtar/milo/backend/internal/db/dbq"
+	"github.com/mdhishaamakhtar/milo/backend/gen/milo/miloconnect"
+	"github.com/mdhishaamakhtar/milo/backend/internal/db/query"
 )
 
 type ctxKey struct{}
@@ -22,13 +23,13 @@ type caller struct {
 
 // public procedures need no session.
 var public = map[string]bool{
-	milov1connect.AuthServiceRegisterProcedure: true,
-	milov1connect.AuthServiceLoginProcedure:    true,
+	miloconnect.AuthServiceRegisterProcedure: true,
+	miloconnect.AuthServiceLoginProcedure:    true,
 }
 
 // NewInterceptor checks the bearer token on every non-public call and puts the
 // signed-in user in the context.
-func NewInterceptor(q *dbq.Queries, now func() time.Time) connect.ServerInterceptor {
+func NewInterceptor(q *query.Queries, now func() time.Time) connect.ServerInterceptor {
 	return func(next connect.ServerFunc) connect.ServerFunc {
 		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 			if public[spec.Procedure] {
@@ -47,7 +48,8 @@ func NewInterceptor(q *dbq.Queries, now func() time.Time) connect.ServerIntercep
 				return errSignIn()
 			}
 			if err != nil {
-				return connect.NewError(connect.CodeInternal, "Couldn't check your session.")
+				slog.Error("session lookup failed", "err", err)
+				return connect.NewError(connect.CodeInternal, "Something went wrong on the server.")
 			}
 			return next(context.WithValue(ctx, ctxKey{}, caller{userID: s.UserID, tokenHash: s.TokenHash}), spec, stream)
 		}

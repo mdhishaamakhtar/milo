@@ -1,0 +1,173 @@
+syntax = "proto3";
+
+package milo;
+
+import "google/protobuf/timestamp.proto";
+import "milo/common.proto";
+
+// Milo, the agent. It reads the user's log on the server and proposes changes
+// as cards; the app applies a card's changes to its own store and syncs them.
+service MiloService {
+  // One user turn. Streams Milo's reply.
+  rpc Send(SendRequest) returns (stream SendResponse);
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+  rpc GetConversation(GetConversationRequest) returns (GetConversationResponse);
+  // Records what the user did with a card, so Milo knows on the next turn.
+  rpc SetCardStatus(SetCardStatusRequest) returns (SetCardStatusResponse);
+}
+
+// Where the user is when they ask.
+message MiloContext {
+  // "today", "workout", "history", "workout_detail", "progress", "exercise", "exercises", "profile".
+  string screen = 1;
+  string workout_id = 2;
+  string exercise_id = 3;
+  // ISO date the user is looking at, if any.
+  string date = 4;
+  // The phone's IANA time zone, e.g. "Asia/Kolkata", so "yesterday" means the user's yesterday.
+  string timezone = 5;
+}
+
+message SendRequest {
+  // Empty starts a new conversation.
+  string conversation_id = 1;
+  string text = 2;
+  MiloContext context = 3;
+}
+
+message SendResponse {
+  oneof event {
+    TextDelta text_delta = 1;
+    Reading reading = 2;
+    Card card = 3;
+    Done done = 4;
+    MiloError error = 5;
+  }
+}
+
+message TextDelta {
+  string text = 1;
+}
+
+// What Milo looked at, e.g. "Read 12 chest press sessions since Sep 2024".
+message Reading {
+  string summary = 1;
+}
+
+message Done {
+  string conversation_id = 1;
+}
+
+message MiloError {
+  string message = 1;
+  bool retryable = 2;
+}
+
+enum CardKind {
+  CARD_KIND_UNSPECIFIED = 0;
+  // A movement Milo worked out, with sets to add. Add to workout / Edit.
+  CARD_KIND_NEW_EXERCISE = 1;
+  // Sets for a known exercise. Applied on arrival, with Undo.
+  CARD_KIND_LOGGED = 2;
+  // Before/after edit of existing rows. Apply change / Not now.
+  CARD_KIND_CHANGE = 3;
+  // A template drafted in conversation. Save template / Edit list.
+  CARD_KIND_TEMPLATE_DRAFT = 4;
+  // A progress chart. Open.
+  CARD_KIND_CHART = 5;
+  // A summary of one workout. Open.
+  CARD_KIND_WORKOUT = 6;
+}
+
+enum CardStatus {
+  CARD_STATUS_UNSPECIFIED = 0;
+  CARD_STATUS_PENDING = 1;
+  CARD_STATUS_APPLIED = 2;
+  CARD_STATUS_DISMISSED = 3;
+  CARD_STATUS_UNDONE = 4;
+}
+
+message Card {
+  string id = 1;
+  CardKind kind = 2;
+  string title = 3;
+  string subtitle = 4;
+  // Display rows. For a change: label "Set 4", before "20 kg × 15", after "25 kg × 15".
+  repeated CardLine lines = 5;
+  // What applying the card does to the user's rows.
+  repeated Change changes = 6;
+  // Versions of existing rows the changes were based on.
+  repeated RowVersion base = 7;
+  Chart chart = 8;
+  // Apply without a tap (sets for known exercises).
+  bool auto_apply = 9;
+  string workout_id = 10;
+  string exercise_id = 11;
+  // A short line under the card, e.g. "Good enough to log now."
+  string note = 12;
+  CardStatus status = 13;
+}
+
+message CardLine {
+  string label = 1;
+  string before = 2;
+  string after = 3;
+}
+
+message Chart {
+  string title = 1;
+  // "top_set", "volume" or "e1rm".
+  string metric = 2;
+  WeightUnit unit = 3;
+  repeated ChartPoint points = 4;
+  string caption = 5;
+}
+
+message ChartPoint {
+  google.protobuf.Timestamp at = 1;
+  double value = 2;
+  string label = 3;
+}
+
+message Conversation {
+  string id = 1;
+  string title = 2;
+  // What came of it, e.g. "Changed 3 sets".
+  string summary = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+message MiloItem {
+  int64 id = 1;
+  oneof item {
+    string user_text = 2;
+    string assistant_text = 3;
+    Reading reading = 4;
+    Card card = 5;
+  }
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message ListConversationsRequest {
+  int32 limit = 1;
+}
+
+message ListConversationsResponse {
+  repeated Conversation conversations = 1;
+}
+
+message GetConversationRequest {
+  string id = 1;
+}
+
+message GetConversationResponse {
+  Conversation conversation = 1;
+  repeated MiloItem items = 2;
+}
+
+message SetCardStatusRequest {
+  string card_id = 1;
+  CardStatus status = 2;
+}
+
+message SetCardStatusResponse {}

@@ -4,6 +4,10 @@ modules:
 lint:
   use:
     - STANDARD
+  except:
+    # Only Milo's own apps call this API, and `buf breaking` guards changes,
+    # so the package carries no version number.
+    - PACKAGE_VERSION_SUFFIX
 breaking:
   use:
     - FILE

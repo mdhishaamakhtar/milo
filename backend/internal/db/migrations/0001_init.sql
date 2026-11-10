@@ -63,7 +63,7 @@ CREATE TABLE settings (
     display_unit   text NOT NULL DEFAULT 'kg' CHECK (display_unit IN ('kg','lb')),
     rest_default_s integer NOT NULL DEFAULT 60,
     height_cm      double precision,
-    birth_date     date,
+    birth_date     text NOT NULL DEFAULT '' CHECK (birth_date ~ '^([0-9]{4}-[0-9]{2}-[0-9]{2})?$'),
     sex            text NOT NULL DEFAULT '',
     updated_at     timestamptz NOT NULL DEFAULT now(),
     server_seq     bigint NOT NULL DEFAULT nextval('sync_seq')
@@ -123,8 +123,8 @@ CREATE TABLE sets (
     position            integer NOT NULL DEFAULT 0,
     kind                text NOT NULL DEFAULT 'normal' CHECK (kind IN ('normal','warmup','drop','failure')),
     reps                integer,
-    -- Exact weight as entered, in weight_unit.
-    weight              numeric(9,3),
+    -- Exact weight as typed ('' for none), in weight_unit. Maths happens in the app and server code.
+    weight              text NOT NULL DEFAULT '' CHECK (weight ~ '^([0-9]{1,6}(\.[0-9]{1,3})?)?$'),
     weight_unit         text NOT NULL DEFAULT 'kg' CHECK (weight_unit IN ('kg','lb')),
     per_side            boolean NOT NULL DEFAULT false,
     duration_s          integer,

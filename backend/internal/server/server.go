@@ -1,4 +1,4 @@
-// Package server wires the HTTP routes: health check and the Connect services.
+// Package server wires the HTTP routes: the health check and the API services.
 package server
 
 import (
@@ -11,12 +11,12 @@ import (
 	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/mdhishaamakhtar/milo/backend/gen/milo/v1/milov1connect"
+	"github.com/mdhishaamakhtar/milo/backend/gen/milo/miloconnect"
+	"github.com/mdhishaamakhtar/milo/backend/internal/agent"
 	"github.com/mdhishaamakhtar/milo/backend/internal/auth"
 	"github.com/mdhishaamakhtar/milo/backend/internal/config"
-	"github.com/mdhishaamakhtar/milo/backend/internal/db/dbq"
-	"github.com/mdhishaamakhtar/milo/backend/internal/milo"
-	"github.com/mdhishaamakhtar/milo/backend/internal/syncsvc"
+	"github.com/mdhishaamakhtar/milo/backend/internal/db/query"
+	"github.com/mdhishaamakhtar/milo/backend/internal/sync"
 )
 
 // Deps is everything the handlers need.
@@ -24,29 +24,22 @@ type Deps struct {
 	Config config.Config
 	Pool   *pgxpool.Pool
 	Logger *slog.Logger
-	// Now defaults to time.Now.
-	Now func() time.Time
-	// MiloModel replaces the Claude API (tests). When nil, the API key in Config is used.
-	MiloModel milo.Model
+	// Model replaces the Claude API in tests. When nil, the API key in Config is used.
+	Model agent.Model
 }
 
 // New returns the API's root handler.
 func New(d Deps) http.Handler {
-	if d.Now == nil {
-		d.Now = time.Now
-	}
-	q := dbq.New(d.Pool)
-
-	rpc := connect.NewServer(auth.NewInterceptor(q, d.Now))
-	milov1connect.RegisterAuthServiceHandler(rpc, auth.NewService(d.Pool, d.Config.InviteCode, d.Now))
-	milov1connect.RegisterSyncServiceHandler(rpc, syncsvc.NewService(d.Pool))
-
-	model := d.MiloModel
+	model := d.Model
 	if model == nil && d.Config.AnthropicKey != "" {
-		model = milo.NewAnthropicModel(d.Config.AnthropicKey)
+		model = agent.NewAnthropicModel(d.Config.AnthropicKey)
 	}
-	milov1connect.RegisterMiloServiceHandler(rpc, milo.NewService(d.Pool, milo.Options{
-		Model: model, ModelName: d.Config.Model, DailyTokenCap: d.Config.DailyTokenCap, Now: d.Now, Logger: d.Logger,
+
+	rpc := connect.NewServer(auth.NewInterceptor(query.New(d.Pool), time.Now))
+	miloconnect.RegisterAuthServiceHandler(rpc, auth.NewService(d.Pool, d.Config.InviteCode, time.Now))
+	miloconnect.RegisterSyncServiceHandler(rpc, sync.NewService(d.Pool))
+	miloconnect.RegisterMiloServiceHandler(rpc, agent.NewService(d.Pool, agent.Options{
+		Model: model, ModelName: d.Config.Model, DailyTokenCap: d.Config.DailyTokenCap, Logger: d.Logger,
 	}))
 
 	mux := http.NewServeMux()

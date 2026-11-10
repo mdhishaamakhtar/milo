@@ -5,14 +5,14 @@ import (
 	"testing"
 
 	"github.com/mdhishaamakhtar/milo/backend/internal/db"
-	"github.com/mdhishaamakhtar/milo/backend/internal/db/dbq"
-	"github.com/mdhishaamakhtar/milo/backend/internal/testdb"
+	"github.com/mdhishaamakhtar/milo/backend/internal/db/query"
+	"github.com/mdhishaamakhtar/milo/backend/internal/testkit"
 )
 
 func TestOpenMigratesAndSeeds(t *testing.T) {
 	ctx := context.Background()
-	pool, url := testdb.NewWithURL(t)
-	q := dbq.New(pool)
+	pool, url := testkit.DB(t)
+	q := query.New(pool)
 
 	count, err := q.CountBuiltinExercises(ctx)
 	if err != nil {
@@ -39,11 +39,11 @@ func TestOpenMigratesAndSeeds(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer again.Close()
-	count2, err := dbq.New(again).CountBuiltinExercises(ctx)
+	count2, err := query.New(again).CountBuiltinExercises(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bench2, err := dbq.New(again).GetBuiltinExerciseByName(ctx, "Bench Press (Barbell)")
+	bench2, err := query.New(again).GetBuiltinExerciseByName(ctx, "Bench Press (Barbell)")
 	if err != nil {
 		t.Fatal(err)
 	}

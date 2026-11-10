@@ -9,11 +9,11 @@ import (
 
 	"github.com/mdhishaamakhtar/milo/backend/internal/config"
 	"github.com/mdhishaamakhtar/milo/backend/internal/server"
-	"github.com/mdhishaamakhtar/milo/backend/internal/testdb"
+	"github.com/mdhishaamakhtar/milo/backend/internal/testkit"
 )
 
 func TestHealthz(t *testing.T) {
-	pool := testdb.New(t)
+	pool, _ := testkit.DB(t)
 	srv := httptest.NewServer(server.New(server.Deps{Config: config.Config{}, Pool: pool, Logger: slog.New(slog.DiscardHandler)}))
 	defer srv.Close()
 

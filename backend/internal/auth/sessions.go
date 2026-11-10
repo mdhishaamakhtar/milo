@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/mdhishaamakhtar/milo/backend/internal/db/dbq"
+	"github.com/mdhishaamakhtar/milo/backend/internal/db/query"
 )
 
 const (
@@ -39,34 +39,34 @@ func hashToken(token string) []byte {
 	return sum[:]
 }
 
-func createSession(ctx context.Context, q *dbq.Queries, userID uuid.UUID, now time.Time) (string, error) {
+func createSession(ctx context.Context, q *query.Queries, userID uuid.UUID, now time.Time) (string, error) {
 	token, hash, err := newToken()
 	if err != nil {
 		return "", err
 	}
-	if err := q.CreateSession(ctx, dbq.CreateSessionParams{TokenHash: hash, UserID: userID, ExpiresAt: now.Add(sessionTTL)}); err != nil {
+	if err := q.CreateSession(ctx, query.CreateSessionParams{TokenHash: hash, UserID: userID, ExpiresAt: now.Add(sessionTTL)}); err != nil {
 		return "", fmt.Errorf("create session: %w", err)
 	}
 	return token, nil
 }
 
 // lookupSession returns the session for a token, extending it when it is used.
-func lookupSession(ctx context.Context, q *dbq.Queries, token string, now time.Time) (dbq.Session, error) {
+func lookupSession(ctx context.Context, q *query.Queries, token string, now time.Time) (query.Session, error) {
 	hash := hashToken(token)
 	s, err := q.GetSession(ctx, hash)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return dbq.Session{}, errNoSession
+		return query.Session{}, errNoSession
 	}
 	if err != nil {
-		return dbq.Session{}, fmt.Errorf("get session: %w", err)
+		return query.Session{}, fmt.Errorf("get session: %w", err)
 	}
 	if !now.Before(s.ExpiresAt) {
 		_ = q.DeleteSession(ctx, hash)
-		return dbq.Session{}, errNoSession
+		return query.Session{}, errNoSession
 	}
 	if now.Sub(s.LastUsedAt) > touchEvery {
-		if err := q.TouchSession(ctx, dbq.TouchSessionParams{TokenHash: hash, ExpiresAt: now.Add(sessionTTL)}); err != nil {
-			return dbq.Session{}, fmt.Errorf("touch session: %w", err)
+		if err := q.TouchSession(ctx, query.TouchSessionParams{TokenHash: hash, ExpiresAt: now.Add(sessionTTL)}); err != nil {
+			return query.Session{}, fmt.Errorf("touch session: %w", err)
 		}
 	}
 	return s, nil

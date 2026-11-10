@@ -15,14 +15,17 @@ plugins:
   - remote: buf.build/connectrpc/go
     out: ../backend/gen
     opt: paths=source_relative
-  # iOS app
+  # iOS app (its own MiloAPI framework)
   - remote: buf.build/apple/swift
-    out: ../ios/Milo/Generated
-    opt: FileNaming=PathToUnderscores
-  - remote: buf.build/connectrpc/swift
-    out: ../ios/Milo/Generated
+    out: ../ios/MiloAPI/Generated
     opt:
       - FileNaming=PathToUnderscores
+      - Visibility=Public
+  - remote: buf.build/connectrpc/swift
+    out: ../ios/MiloAPI/Generated
+    opt:
+      - FileNaming=PathToUnderscores
+      - Visibility=Public
       - GenerateAsyncMethods=true
       - GenerateCallbackMethods=false
   # Android, when it exists:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -15,8 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	milov1 "github.com/mdhishaamakhtar/milo/backend/gen/milo/v1"
-	"github.com/mdhishaamakhtar/milo/backend/internal/db/dbq"
+	"github.com/mdhishaamakhtar/milo/backend/gen/milo"
+	"github.com/mdhishaamakhtar/milo/backend/internal/db/query"
 )
 
 const (
@@ -26,20 +27,20 @@ const (
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9_.]{3,32}$`)
 
-// Service implements milov1connect.AuthServiceHandler.
+// Service implements miloconnect.AuthServiceHandler.
 type Service struct {
 	pool       *pgxpool.Pool
-	q          *dbq.Queries
+	q          *query.Queries
 	inviteCode string
 	now        func() time.Time
 }
 
 // NewService returns the account service. An empty inviteCode closes sign-up.
 func NewService(pool *pgxpool.Pool, inviteCode string, now func() time.Time) *Service {
-	return &Service{pool: pool, q: dbq.New(pool), inviteCode: inviteCode, now: now}
+	return &Service{pool: pool, q: query.New(pool), inviteCode: inviteCode, now: now}
 }
 
-func (s *Service) Register(ctx context.Context, req *milov1.RegisterRequest) (*milov1.RegisterResponse, error) {
+func (s *Service) Register(ctx context.Context, req *milo.RegisterRequest) (*milo.RegisterResponse, error) {
 	if s.inviteCode == "" || subtle.ConstantTimeCompare([]byte(req.GetInviteCode()), []byte(s.inviteCode)) != 1 {
 		return nil, connect.NewError(connect.CodePermissionDenied, "Sign-up needs an invite code.")
 	}
@@ -59,12 +60,12 @@ func (s *Service) Register(ctx context.Context, req *milov1.RegisterRequest) (*m
 		return nil, internal(err)
 	}
 
-	var user dbq.User
+	var user query.User
 	var token string
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		var err error
-		if user, err = q.CreateUser(ctx, dbq.CreateUserParams{ID: id, Username: username, PasswordHash: hash}); err != nil {
+		if user, err = q.CreateUser(ctx, query.CreateUserParams{ID: id, Username: username, PasswordHash: hash}); err != nil {
 			return err
 		}
 		if err = q.CreateDefaultSettings(ctx, user.ID); err != nil {
@@ -79,10 +80,10 @@ func (s *Service) Register(ctx context.Context, req *milov1.RegisterRequest) (*m
 	if err != nil {
 		return nil, internal(err)
 	}
-	return &milov1.RegisterResponse{Token: token, User: toProto(user)}, nil
+	return &milo.RegisterResponse{Token: token, User: toProto(user)}, nil
 }
 
-func (s *Service) Login(ctx context.Context, req *milov1.LoginRequest) (*milov1.LoginResponse, error) {
+func (s *Service) Login(ctx context.Context, req *milo.LoginRequest) (*milo.LoginResponse, error) {
 	user, err := s.q.GetUserByUsername(ctx, normalise(req.GetUsername()))
 	if errors.Is(err, pgx.ErrNoRows) {
 		Verify(dummyHash, req.GetPassword())
@@ -98,17 +99,17 @@ func (s *Service) Login(ctx context.Context, req *milov1.LoginRequest) (*milov1.
 	if err != nil {
 		return nil, internal(err)
 	}
-	return &milov1.LoginResponse{Token: token, User: toProto(user)}, nil
+	return &milo.LoginResponse{Token: token, User: toProto(user)}, nil
 }
 
-func (s *Service) Logout(ctx context.Context, _ *milov1.LogoutRequest) (*milov1.LogoutResponse, error) {
+func (s *Service) Logout(ctx context.Context, _ *milo.LogoutRequest) (*milo.LogoutResponse, error) {
 	if err := s.q.DeleteSession(ctx, tokenHashFrom(ctx)); err != nil {
 		return nil, internal(err)
 	}
-	return &milov1.LogoutResponse{}, nil
+	return &milo.LogoutResponse{}, nil
 }
 
-func (s *Service) Me(ctx context.Context, _ *milov1.MeRequest) (*milov1.MeResponse, error) {
+func (s *Service) Me(ctx context.Context, _ *milo.MeRequest) (*milo.MeResponse, error) {
 	user, err := s.q.GetUser(ctx, UserID(ctx))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errSignIn()
@@ -116,10 +117,10 @@ func (s *Service) Me(ctx context.Context, _ *milov1.MeRequest) (*milov1.MeRespon
 	if err != nil {
 		return nil, internal(err)
 	}
-	return &milov1.MeResponse{User: toProto(user)}, nil
+	return &milo.MeResponse{User: toProto(user)}, nil
 }
 
-func (s *Service) ChangePassword(ctx context.Context, req *milov1.ChangePasswordRequest) (*milov1.ChangePasswordResponse, error) {
+func (s *Service) ChangePassword(ctx context.Context, req *milo.ChangePasswordRequest) (*milo.ChangePasswordResponse, error) {
 	user, err := s.checkCurrentPassword(ctx, req.GetCurrentPassword())
 	if err != nil {
 		return nil, err
@@ -133,18 +134,18 @@ func (s *Service) ChangePassword(ctx context.Context, req *milov1.ChangePassword
 	}
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		if err := q.UpdatePasswordHash(ctx, dbq.UpdatePasswordHashParams{ID: user.ID, PasswordHash: hash}); err != nil {
+		if err := q.UpdatePasswordHash(ctx, query.UpdatePasswordHashParams{ID: user.ID, PasswordHash: hash}); err != nil {
 			return err
 		}
-		return q.DeleteOtherSessions(ctx, dbq.DeleteOtherSessionsParams{UserID: user.ID, TokenHash: tokenHashFrom(ctx)})
+		return q.DeleteOtherSessions(ctx, query.DeleteOtherSessionsParams{UserID: user.ID, TokenHash: tokenHashFrom(ctx)})
 	})
 	if err != nil {
 		return nil, internal(err)
 	}
-	return &milov1.ChangePasswordResponse{}, nil
+	return &milo.ChangePasswordResponse{}, nil
 }
 
-func (s *Service) DeleteAccount(ctx context.Context, req *milov1.DeleteAccountRequest) (*milov1.DeleteAccountResponse, error) {
+func (s *Service) DeleteAccount(ctx context.Context, req *milo.DeleteAccountRequest) (*milo.DeleteAccountResponse, error) {
 	user, err := s.checkCurrentPassword(ctx, req.GetPassword())
 	if err != nil {
 		return nil, err
@@ -152,19 +153,19 @@ func (s *Service) DeleteAccount(ctx context.Context, req *milov1.DeleteAccountRe
 	if err := s.q.DeleteUser(ctx, user.ID); err != nil {
 		return nil, internal(err)
 	}
-	return &milov1.DeleteAccountResponse{}, nil
+	return &milo.DeleteAccountResponse{}, nil
 }
 
-func (s *Service) checkCurrentPassword(ctx context.Context, password string) (dbq.User, error) {
+func (s *Service) checkCurrentPassword(ctx context.Context, password string) (query.User, error) {
 	user, err := s.q.GetUser(ctx, UserID(ctx))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return dbq.User{}, errSignIn()
+		return query.User{}, errSignIn()
 	}
 	if err != nil {
-		return dbq.User{}, internal(err)
+		return query.User{}, internal(err)
 	}
 	if !Verify(user.PasswordHash, password) {
-		return dbq.User{}, connect.NewError(connect.CodeUnauthenticated, "That password isn't right.")
+		return query.User{}, connect.NewError(connect.CodeUnauthenticated, "That password isn't right.")
 	}
 	return user, nil
 }
@@ -189,10 +190,12 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
+// internal logs an unexpected error and tells the client only that it happened.
 func internal(err error) error {
-	return connect.NewError(connect.CodeInternal, err.Error())
+	slog.Error("auth failed", "err", err)
+	return connect.NewError(connect.CodeInternal, "Something went wrong on the server.")
 }
 
-func toProto(u dbq.User) *milov1.User {
-	return &milov1.User{Id: u.ID.String(), Username: u.Username, CreatedAt: timestamppb.New(u.CreatedAt)}
+func toProto(u query.User) *milo.User {
+	return &milo.User{Id: u.ID.String(), Username: u.Username, CreatedAt: timestamppb.New(u.CreatedAt)}
 }

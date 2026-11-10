@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package milo;
+
+import "google/protobuf/timestamp.proto";
+
+// Accounts. Every other service needs `Authorization: Bearer <token>`.
+service AuthService {
+  // Needs the server's invite code.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  rpc Me(MeRequest) returns (MeResponse);
+  // Signs out every other session.
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+  // Deletes the account and everything in it.
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
+}
+
+message User {
+  string id = 1;
+  string username = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+  string invite_code = 3;
+}
+
+message RegisterResponse {
+  string token = 1;
+  User user = 2;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string token = 1;
+  User user = 2;
+}
+
+message LogoutRequest {}
+
+message LogoutResponse {}
+
+message MeRequest {}
+
+message MeResponse {
+  User user = 1;
+}
+
+message ChangePasswordRequest {
+  string current_password = 1;
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {}
+
+message DeleteAccountRequest {
+  string password = 1;
+}
+
+message DeleteAccountResponse {}
