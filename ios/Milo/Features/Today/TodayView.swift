@@ -61,7 +61,8 @@ struct TodayView: View {
 
                 SectionHeader("Recent") {
                     if !data.value.recent.isEmpty {
-                        NavigationLink("All history") { HistoryView() }
+                        // History is a tab: go to it rather than push a second one.
+                        Button("All history") { app.tab = .history }
                     }
                 }
                 if data.value.recent.isEmpty {

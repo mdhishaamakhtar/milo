@@ -22,11 +22,8 @@ struct SignInView: View {
         GeometryReader { geo in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 9) {
-                        BarMLogo(size: 22, working: busy)
-                        Text("Milo").font(.sofia(21, .bold, relativeTo: .title3))
-                    }
-                    .padding(.top, 14)
+                    MiloWordmark(working: busy)
+                        .padding(.top, 14)
 
                     Text("The workout log\nyou can talk to.")
                         .font(.sofia(33, .bold, relativeTo: .largeTitle))

@@ -57,7 +57,7 @@ struct MiloView: View {
                     Button(role: .close) { dismiss() }.tint(Color.tx)
                 }
                 ToolbarItem(placement: .principal) {
-                    HStack(spacing: 7) { BarMLogo(size: 16, working: session.busy); Text("Milo").font(.sofia(17, .bold)) }
+                    HStack(alignment: .firstTextBaseline, spacing: 7) { BarMLogo(size: 16, working: session.busy); Text("Milo").font(.sofia(17, .bold)) }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { path.append(ChatsRoute()) } label: { Label("Chats", systemImage: "clock.arrow.circlepath") }
@@ -242,7 +242,7 @@ private struct ThinkingRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
             BarMLogo(size: 13, working: true)
             ShimmerText(text: words).id(words).transition(.opacity)
         }
@@ -311,7 +311,7 @@ struct MiloLabel: View {
     var working = false
 
     var body: some View {
-        HStack(spacing: 7) { BarMLogo(size: 13, working: working); Text("Milo").font(.sofia(13, .semibold)).foregroundStyle(Color.tx2) }
+        HStack(alignment: .firstTextBaseline, spacing: 7) { BarMLogo(size: 13, working: working); Text("Milo").font(.sofia(13, .semibold)).foregroundStyle(Color.tx2) }
             .padding(.horizontal, 4)
     }
 }

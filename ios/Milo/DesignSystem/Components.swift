@@ -39,6 +39,21 @@ struct Badge: View {
     }
 }
 
+/// Milo's mark and name together, the way the app signs itself: on the sign-in screen
+/// and at the top of each tab.
+struct MiloWordmark: View {
+    var working = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 9) {
+            BarMLogo(size: 22, working: working)
+            Text("Milo").font(.sofia(21, .bold, relativeTo: .title3))
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Milo")
+    }
+}
+
 /// Milo's mark: four bars spelling an M that ends on the tallest. While Milo is
 /// working the bars rise and fall in turn.
 struct BarMLogo: View {
@@ -63,6 +78,10 @@ struct BarMLogo: View {
             }
         }
         .frame(width: size, height: size * 36 / 48, alignment: .bottom)
+        // The bars stand on the line of text beside them: in a row aligned on the text
+        // baseline, their bottom meets the bottom of the letters.
+        .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+        .alignmentGuide(.lastTextBaseline) { $0[.bottom] }
         .opacity(working && reduceMotion ? 0.6 : 1)
         .animation(.settle, value: working)
         .accessibilityHidden(true)

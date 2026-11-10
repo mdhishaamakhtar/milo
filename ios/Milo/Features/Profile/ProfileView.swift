@@ -26,7 +26,7 @@ struct ProfileView: View {
                     .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 4, trailing: 4))
 
                 Section {
-                    NavigationLink { BodyView() } label: {
+                    NavigationLink(value: ScreenRoute.body) {
                         SettingsRow(icon: "person", title: "Body", value: data.value.latestKg.map { "\(Format.kgIn($0, unit)) \(unit.rawValue)" } ?? "Add")
                     }
                     NavigationLink { HealthView() } label: {
@@ -50,7 +50,7 @@ struct ProfileView: View {
                     } label: {
                         MenuRow(row: SettingsRow(icon: "timer", title: "Rest timer", value: Format.clock(data.value.settings.restDefaultS)))
                     }
-                    NavigationLink { ExercisesView() } label: {
+                    NavigationLink(value: ScreenRoute.exercises) {
                         SettingsRow(icon: "line.3.horizontal", title: "Exercises", value: "\(data.value.exercises)")
                     }
                 } footer: {
@@ -104,6 +104,7 @@ struct ProfileView: View {
             .scrollContentBackground(.hidden)
             .miloScreen()
             .navigationBarTitleDisplayMode(.inline)
+            .miloDestinations()
             .toolbar {
                 // Nothing to save here (settings apply as you change them), so the standard Close.
                 ToolbarItem(placement: .cancellationAction) { Button(role: .close) { dismiss() }.tint(Color.tx) }

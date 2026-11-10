@@ -17,6 +17,9 @@ final class AppModel {
     /// The conversation with Milo, kept while the app runs so closing the sheet doesn't lose it.
     @ObservationIgnored private(set) lazy var milo = MiloSession(app: self)
 
+    /// The tab on screen, so a link like Today's "All history" can switch to it.
+    var tab = TabID.today
+    enum TabID { case today, history, progress }
     /// The workout cover is up. The workout itself is whichever one is running.
     var showingWorkout = false
     var showingMilo = false

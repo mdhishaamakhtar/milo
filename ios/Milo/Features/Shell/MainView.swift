@@ -3,14 +3,11 @@ import SwiftUI
 /// Three tabs, the Ask Milo bar above them, and the workout, Milo and Profile on top.
 struct MainView: View {
     @Environment(AppModel.self) private var app
-    @State private var tab = TabID.today
     @Namespace private var workoutSpace
-
-    enum TabID { case today, history, progress }
 
     var body: some View {
         @Bindable var app = app
-        TabView(selection: $tab) {
+        TabView(selection: $app.tab) {
             Tab("Today", systemImage: "dumbbell", value: .today) {
                 NavigationStack { TodayView().miloDestinations() }
             }
@@ -46,11 +43,13 @@ struct AskMiloBar: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 11) {
-                BarMLogo(size: 18)
-                Text(placement == .inline ? "Ask Milo" : prompt)
-                    .font(.sofia(16.5, .regular))
-                    .foregroundStyle(Color.tx2)
-                    .lineLimit(1)
+                HStack(alignment: .firstTextBaseline, spacing: 11) {
+                    BarMLogo(size: 18)
+                    Text(placement == .inline ? "Ask Milo" : prompt)
+                        .font(.sofia(16.5, .regular))
+                        .foregroundStyle(Color.tx2)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 0)
                 Image(systemName: "mic")
                     .font(.system(size: 17, weight: .medium))
@@ -93,22 +92,37 @@ private struct WorkoutSourceModifier: ViewModifier {
     }
 }
 
-/// Where a tab's stack can go: a past workout or an exercise.
+/// Where a stack can go: a past workout, an exercise, or a list reached from more than one place.
+/// Every push in these stacks is by value. A view pushed with `NavigationLink { View() }` sits
+/// after the path, so a value pushed from it lands underneath it and Back runs in the wrong order.
 struct WorkoutRoute: Hashable { let id: UUID }
 struct ExerciseRoute: Hashable { let id: UUID }
+enum ScreenRoute: Hashable { case exercises, body }
 
 extension View {
     func miloDestinations() -> some View {
         navigationDestination(for: WorkoutRoute.self) { WorkoutDetailView(workoutID: $0.id) }
             .navigationDestination(for: ExerciseRoute.self) { ExerciseDetailView(exerciseID: $0.id) }
+            .navigationDestination(for: ScreenRoute.self) { route in
+                switch route {
+                case .exercises: ExercisesView()
+                case .body: BodyView()
+                }
+            }
     }
 }
 
-/// The signed-in user's initial on the toolbar's glass, top trailing on each tab: it opens Profile.
-struct ProfileToolbarItem: ToolbarContent {
+/// The top of each tab: Milo's name at the leading edge, on the bar itself rather than glass
+/// (it isn't a control), and the signed-in user's initial on glass at the trailing edge,
+/// which opens Profile.
+struct TabToolbar: ToolbarContent {
     @Environment(AppModel.self) private var app
 
     var body: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            MiloWordmark().fixedSize()
+        }
+        .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .topBarTrailing) {
             Button { app.showingProfile = true } label: {
                 Text(app.session.user?.username.prefix(1).uppercased() ?? "M")
@@ -121,11 +135,11 @@ struct ProfileToolbarItem: ToolbarContent {
 }
 
 extension View {
-    /// A top-level tab's standard navigation bar: a large title that shrinks as you scroll,
-    /// a line under it, and Profile at the trailing edge.
+    /// A top-level tab's standard navigation bar: Milo's name and Profile, then a large title
+    /// that shrinks as you scroll, with a line under it.
     func tabTitle(_ title: String, subtitle: String) -> some View {
         navigationTitle(title)
             .navigationSubtitle(subtitle)
-            .toolbar { ProfileToolbarItem() }
+            .toolbar { TabToolbar() }
     }
 }

@@ -11,13 +11,15 @@ struct AddField: View {
     var body: some View {
         @Bindable var model = model
         HStack(spacing: 11) {
-            BarMLogo(size: 18)
-            TextField(placeholder, text: $model.query, axis: .vertical)
-                .font(.sofia(16.5, .regular))
-                .lineLimit(1...4)
-                .focused(focused)
-                .submitLabel(.send)
-                .onSubmit(send)
+            HStack(alignment: .firstTextBaseline, spacing: 11) {
+                BarMLogo(size: 18)
+                TextField(placeholder, text: $model.query, axis: .vertical)
+                    .font(.sofia(16.5, .regular))
+                    .lineLimit(1...4)
+                    .focused(focused)
+                    .submitLabel(.send)
+                    .onSubmit(send)
+            }
             MicButton(text: $model.query)
             if !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
                 Button(action: send) {
@@ -77,8 +79,8 @@ struct MatchList: View {
                 .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
             }
             Button { ask(model.query); model.query = "" } label: {
-                HStack(alignment: .top, spacing: 12) {
-                    BarMLogo(size: 18).padding(.top, 3)
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    BarMLogo(size: 18)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(matches.value.isEmpty ? "Not in your exercises" : "Not one of these?").font(.sofia(16, .semibold))
                         Text("Keep typing what it looks like. Milo will work it out.").font(.sofia(14, .regular)).foregroundStyle(Color.tx2)

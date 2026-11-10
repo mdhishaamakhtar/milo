@@ -34,7 +34,7 @@ struct ProgressTab: View {
                 }
 
                 SectionHeader("Exercises") {
-                    NavigationLink(data.value.exerciseCount > 0 ? "All \(data.value.exerciseCount)" : "All") { ExercisesView() }
+                    NavigationLink(data.value.exerciseCount > 0 ? "All \(data.value.exerciseCount)" : "All", value: ScreenRoute.exercises)
                 }
                 if data.value.top.isEmpty {
                     note("Your most-done exercises show up here, with their top sets over time.")
@@ -57,7 +57,7 @@ struct ProgressTab: View {
                 }
 
                 SectionHeader("Body")
-                NavigationLink { BodyView() } label: { bodyCard }.buttonStyle(.row)
+                NavigationLink(value: ScreenRoute.body) { bodyCard }.buttonStyle(.row)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
