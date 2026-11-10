@@ -1,100 +1,132 @@
-# Milo
+<!-- markdownlint-disable MD033 -->
 
-A workout log you can talk to.
-
-You log sets by tapping, the way you would in any lifting app. When your trainer
-calls out a movement no preset list has heard of, you describe it and Milo works
-out what it is, saves it as your own exercise, and logs it. Anything else you
-could do by tapping (start a workout, fix a set, build a template, ask how the
-month went) you can ask Milo to do instead.
-
-<p>
-  <img src="docs/screenshots/today.png" width="220" alt="Today, with a workout in progress">
-  <img src="docs/screenshots/workout.png" width="220" alt="Logging a set with the number pad">
-  <img src="docs/screenshots/milo.png" width="220" alt="Milo">
+<p align="center">
+  <img src="./docs/brand/milo-social-preview.png" alt="Milo: a workout log you can talk to" width="820">
 </p>
 
-It is a native iPhone app (SwiftUI, iOS 26) with a Go server. Logging works
-offline; Milo needs a connection.
+## <img src="./docs/brand/milo-mark.svg" alt="" width="28" height="28" align="top"> Milo
 
-## How it's put together
+Milo is a workout log you can talk to.
 
-- **One contract.** `proto/` defines every row and every call. `make gen` writes
-  the Go server stubs and the Swift client from it, so they can't drift.
-- **The phone owns the log.** Every screen reads and writes a local SQLite
-  database. A sync call pushes what changed and pulls what's new; the newest
-  write to a row wins.
-- **Milo proposes, the phone applies.** The agent runs on the server and reads
-  your log there, but never writes to it. It sends cards: rows to write, shown
-  as a before and after. The phone applies a card like any other edit, can undo
-  it, and syncs.
-- **Numbers are computed once, twice.** Volume, estimated one-rep max, bests and
-  calories are implemented in Go and in Swift, and both run the same test
-  vectors from `testdata/maths`.
+You log sets by tapping, the way you would in any lifting app. When your trainer calls out a movement no preset list has heard of, you describe it and Milo works out what it is, saves it as your own exercise, and logs it.
 
-[docs/architecture.md](docs/architecture.md) explains each of these in a page.
+Think: "Start my pull day, I did rows at 60 for 8 and 8" or "What have I neglected this month?" and it does it, or answers from your own log.
 
-## Run it
+## What It Does
 
-You need Go 1.27, Docker, Xcode 26, and three tools from Homebrew:
+- Log workouts set by set, with last time's numbers filled in and a rest timer
+- Works offline; the phone owns the log and syncs when it can
+- Ask Milo: an agent that can do anything the buttons can (start and finish workouts, log and fix sets, build templates), with every change undoable and every edit or delete approved by you first
+- Turns a described movement into a real exercise with muscles, equipment and how it's counted
+- Mixed units: each exercise keeps kg or lb, and weights are stored exactly as typed
+- Progress per exercise (top set, volume, estimated 1RM), new bests, and weeks trained
+- Templates as plain ordered lists, with supersets
+- Apple Health: saves finished workouts and calories, reads body weight
+- Export everything as JSON and CSV
+
+## Tech Stack
+
+[![Swift](https://img.shields.io/badge/Swift-6-F05138?style=for-the-badge&logo=swift&logoColor=white)](https://www.swift.org/)
+[![SwiftUI](https://img.shields.io/badge/SwiftUI-iOS_26-0A84FF?style=for-the-badge&logo=apple&logoColor=white)](https://developer.apple.com/swiftui/)
+[![GRDB](https://img.shields.io/badge/GRDB-7-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://github.com/groue/GRDB.swift)
+[![HealthKit](https://img.shields.io/badge/HealthKit-Apple_Health-FF2D55?style=for-the-badge&logo=apple&logoColor=white)](https://developer.apple.com/healthkit/)
+[![Go](https://img.shields.io/badge/Go-1.27-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://go.dev/)
+[![Connect](https://img.shields.io/badge/Connect-RPC-0E1B4D?style=for-the-badge)](https://connectrpc.com/)
+[![Protobuf](https://img.shields.io/badge/Protobuf-Buf-151FD5?style=for-the-badge&logo=buf&logoColor=white)](https://buf.build/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![sqlc](https://img.shields.io/badge/sqlc-Typed_SQL-4B5563?style=for-the-badge)](https://sqlc.dev/)
+[![Claude](https://img.shields.io/badge/Claude-Opus_5.5-D97757?style=for-the-badge&logo=claude&logoColor=white)](https://www.anthropic.com/claude)
+[![Testcontainers](https://img.shields.io/badge/Testcontainers-Go-17A6B2?style=for-the-badge&logo=docker&logoColor=white)](https://golang.testcontainers.org/)
+
+## Quick Start
+
+```bash
+cp .env.example .env    # set MILO_INVITE_CODE to anything
+make up                 # Postgres on port 5433
+make run                # the API on :8080
+make ios                # opens the app in Xcode; press Run
+```
+
+In the app, create an account with the invite code from your `.env`.
+
+Without `ANTHROPIC_API_KEY_MILO` everything works except Milo, which says it isn't set up.
+
+## Manual Dev Setup
+
+### 1. Install the tools
+
+You need Go 1.27, Docker and Xcode 26, plus three tools from Homebrew:
 
 ```bash
 brew install bufbuild/buf/buf sqlc xcodegen
 ```
 
-Then:
+### 2. Configure
 
 ```bash
-cp .env.example .env    # set MILO_INVITE_CODE to anything; add an Anthropic key to talk to Milo
-make up                 # Postgres on port 5433
-make run                # the API on :8080; it migrates the database on start
-make ios                # generates the Xcode project and opens it; press Run
+cp .env.example .env
 ```
 
-In the app, create an account with the invite code from your `.env`. Without an
-Anthropic key everything works except Milo, which says it isn't set up.
+Set `MILO_INVITE_CODE` (sign-up is closed without one) and, to talk to Milo, `ANTHROPIC_API_KEY_MILO`.
 
-## Everyday commands
+### 3. Start infra
 
-| Command | What it does |
-| --- | --- |
-| `make gen` | Regenerates Go and Swift code from `proto/`, and typed queries from the SQL |
-| `make test` | Server tests. They start a real Postgres in Docker, so Docker must be running |
-| `make ios-test` | App tests on a simulator |
-| `make lint` | `buf lint` and `go vet` |
-| `make live` | Runs Milo against the real Claude API. Costs about 40 cents a run |
-
-## Where things are
-
-```
-proto/milo/          The contract: rows (common), sync, auth, and Milo's cards (agent)
-backend/
-  cmd/api/           The server's main
-  internal/agent/    Milo: the tool loop, one file per group of tools, the prompt
-  internal/sync/     Push and pull
-  internal/auth/     Accounts and sessions
-  internal/maths/    Volume, e1RM, bests, calories
-  internal/db/       Migrations (goose) and queries (sqlc)
-  internal/rows/     Database rows to API messages, in one place
-ios/
-  Milo/App/          The app's entry point and shared state
-  Milo/Data/         The local database, sync, and applying Milo's cards
-  Milo/Domain/       Maths and formatting, no UI
-  Milo/DesignSystem/ Colours, type, motion, buttons, shared pieces
-  Milo/Features/     One folder per screen
-  MiloAPI/           The generated client, as its own framework
-testdata/maths/      Test vectors both codebases run
+```bash
+make up
 ```
 
-## Working on it
+### 4. Run backend (port 8080)
 
-[CONTRIBUTING.md](CONTRIBUTING.md) has the conventions and step-by-step recipes
-for the common changes: a new tool for Milo, a new field on a synced row, a
-change to the maths.
+```bash
+make run
+```
+
+It migrates the database on start.
+
+### 5. Run the app
+
+```bash
+make ios
+```
+
+This generates `ios/Milo.xcodeproj` and opens it. Pick an iPhone simulator and press Run; debug builds talk to `localhost:8080`.
+
+## Scripts
+
+| Command | Where | Purpose |
+|---|---|---|
+| `make up` / `make down` | root | Start or stop local Postgres |
+| `make run` | root | Run the API with the repo-root `.env` |
+| `make gen` | root | Regenerate Go and Swift code from `proto/`, and typed queries from the SQL |
+| `make test` | root | Server tests, against a real Postgres (needs Docker) |
+| `make ios` | root | Generate the Xcode project and open it |
+| `make ios-test` | root | App tests on a simulator |
+| `make lint` | root | `buf lint` and `go vet` |
+| `make live` | root | Milo against the real Claude API (needs a key; costs about 40 cents) |
+
+## Project Structure
+
+This is a **monorepo** with one contract shared by the server and the app:
+
+- `proto/` — The contract: every row and every call, generated into Go and Swift
+- `backend/` — The server (Go + Connect + Postgres): sync, accounts, and Milo's agent
+- `ios/` — The iPhone app (SwiftUI + GRDB), with the generated client as its own framework
+- `testdata/maths/` — Test vectors both codebases run, so their numbers agree
+
+## Documentation
+
+- [docs/architecture.md](./docs/architecture.md): how it works, in four ideas (one contract, the phone owns the log, Milo proposes and the phone applies, maths tested once)
+- [CONTRIBUTING.md](./CONTRIBUTING.md): conventions, and recipes for the common changes
+- [docs/brand](./docs/brand): the mark and the social preview
 
 ## Licence
 
-Milo is free software under the [GNU General Public License v3.0](LICENSE): use
-it, change it and share it, and keep what you share under the same terms. The
-Sofia Sans typeface it bundles is under the SIL Open Font License
-(`ios/Milo/Resources/Fonts/OFL.txt`).
+[GPL-3.0](./LICENSE). The bundled Sofia Sans typeface is under the [SIL Open Font License](./ios/Milo/Resources/Fonts/OFL.txt).
+
+## Contributor
+
+- Md Hishaam Akhtar
+
+<p align="center">
+  Built for logging what you actually did.
+</p>

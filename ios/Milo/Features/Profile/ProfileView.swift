@@ -73,7 +73,12 @@ struct ProfileView: View {
                         Text("Delete account").font(.sofia(15, .medium)).foregroundStyle(Color.red)
                     }
                 } footer: {
-                    Text("Milo 0.1, alpha").font(.sofia(13)).foregroundStyle(Color.tx3).frame(maxWidth: .infinity).padding(.top, 8)
+                    // Whether what's on this phone has reached the server.
+                    VStack(spacing: 4) {
+                        Text(syncText)
+                        Text("Milo 0.1, alpha")
+                    }
+                    .font(.sofia(13)).foregroundStyle(Color.tx3).frame(maxWidth: .infinity).padding(.top, 8)
                 }
                 .listRowBackground(Color.s1)
             }
@@ -107,6 +112,14 @@ struct ProfileView: View {
     }
 
     private var unit: WeightUnit { data.value.settings.displayUnit }
+
+    private var syncText: String {
+        if app.sync.isSyncing { return "Syncing" }
+        if !app.connectivity.isOnline { return "Offline. Your log is saved here and syncs when you're back." }
+        if app.sync.lastError != nil { return "Couldn't sync just now. It will try again." }
+        guard let at = app.sync.lastSynced else { return "Not synced yet" }
+        return "Synced \(at.formatted(date: .omitted, time: .shortened))"
+    }
 
     private var header: some View {
         let name = app.session.user?.username ?? ""

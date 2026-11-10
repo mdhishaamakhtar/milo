@@ -86,6 +86,7 @@ struct TodayView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
         }
+        .refreshable { await app.sync.sync() }
         .miloScreen()
         .toolbarVisibility(.hidden, for: .navigationBar)
         .sheet(item: $editingTemplate) { TemplateEditor(template: $0) }
@@ -259,7 +260,7 @@ private struct TemplateCard: View {
             .padding(.top, 12)
             Spacer(minLength: 8)
             HStack {
-                Text(summary.lastUsed.map { "Last \(Format.shortDay($0))" } ?? "Not used yet")
+                Text(summary.lastUsed.map { "Last used \(Format.relativeDay($0))" } ?? "Not used yet")
                     .font(.cap).foregroundStyle(Color.tx3)
                 Spacer()
                 Button(action: start) {

@@ -63,6 +63,7 @@ struct ProgressTab: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
         }
+        .refreshable { await app.sync.sync() }
         .miloScreen()
         .toolbarVisibility(.hidden, for: .navigationBar)
         .onAppear {

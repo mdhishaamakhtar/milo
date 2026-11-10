@@ -48,9 +48,18 @@ struct PadKeyStyle: ButtonStyle {
 /// A tappable row: it dims under the finger, so a tap is never silent.
 struct RowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.6 : 1)
-            .animation(.quick, value: configuration.isPressed)
+        Label(configuration: configuration)
+    }
+
+    private struct Label: View {
+        let configuration: Configuration
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            configuration.label
+                .opacity(!isEnabled ? 0.35 : configuration.isPressed ? 0.6 : 1)
+                .animation(.quick, value: configuration.isPressed)
+        }
     }
 }
 

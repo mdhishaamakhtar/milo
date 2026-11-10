@@ -50,6 +50,7 @@ struct HistoryView: View {
             .padding(.bottom, 24)
         }
         .scrollDismissesKeyboard(.interactively)
+        .refreshable { await app.sync.sync() }
         .miloScreen()
         .toolbarVisibility(.hidden, for: .navigationBar)
         .onAppear {

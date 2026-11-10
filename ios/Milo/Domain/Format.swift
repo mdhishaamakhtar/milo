@@ -93,6 +93,13 @@ nonisolated enum Format {
         Maths.tenths(unit == .lb ? kg / Maths.kgPerLb : kg)
     }
 
+    /// "today", "yesterday", or "7 Oct".
+    static func relativeDay(_ date: Date) -> String {
+        if Calendar.current.isDateInToday(date) { return "today" }
+        if Calendar.current.isDateInYesterday(date) { return "yesterday" }
+        return shortDay(date)
+    }
+
     static func defaultWorkoutName(_ date: Date) -> String {
         date.formatted(.dateTime.weekday(.wide)) + " workout"
     }
