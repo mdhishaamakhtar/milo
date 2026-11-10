@@ -11,7 +11,6 @@ struct FinishView: View {
     @State private var saveToHealth = true
     @State private var saveTemplate = false
     @State private var bodyKg: Double?
-    @State private var discarding = false
     @FocusState private var naming: Bool
 
     var body: some View {
@@ -26,29 +25,21 @@ struct FinishView: View {
                         Text(timeRange(detail.workout.startedAt)).font(.sub).foregroundStyle(Color.tx2)
                     }
                     WorkoutStats(minutes: max(1, Int(Date.now.timeIntervalSince(detail.workout.startedAt) / 60)), volumeKg: detail.volumeKg, sets: detail.doneSetCount)
-                    exercises(detail)
-                    if case let skipped = detail.entries.reduce(0, { $0 + $1.sets.count - $1.doneSets.count }), skipped > 0 {
+                    if detail.doneSetCount == 0 {
+                        Text("No sets ticked yet. Go back and tick the sets you did to save them, or discard this workout.")
+                            .font(.sub).foregroundStyle(Color.tx2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .card()
+                    } else {
+                        exercises(detail)
+                    }
+                    if case let skipped = detail.entries.reduce(0, { $0 + $1.sets.count - $1.doneSets.count }), skipped > 0, detail.doneSetCount > 0 {
                         Text("\(skipped) \(skipped == 1 ? "set" : "sets") you didn't tick won't be saved.")
                             .font(.sub).foregroundStyle(Color.tx2).padding(.horizontal, 4)
                     }
-                    VStack(spacing: 0) {
-                        toggleRow("heart", "Save to Apple Health", detail: app.health.connected ? kcalText(detail) : "Turning this on connects Apple Health.", isOn: $saveToHealth)
-                            .onChange(of: saveToHealth) { _, on in
-                                if on && !app.health.connected { Task { await app.health.connect() } }
-                            }
-                        Divider().overlay(Color.line).padding(.leading, 60)
-                        toggleRow("list.bullet", "Save as a template", detail: nil, isOn: $saveTemplate)
-                    }
-                    .background(Color.s1, in: .rect(cornerRadius: Radius.card))
-                    .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
-                    HStack(spacing: 12) {
-                        Image(systemName: "line.3.horizontal").foregroundStyle(Color.tx3)
-                        TextField("Add a note about today", text: $note, axis: .vertical).font(.body16)
-                    }
-                    .padding(16)
-                    .background(Color.s1, in: .rect(cornerRadius: 20))
-                    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.line))
-                    Button("Discard workout", role: .destructive) { discarding = true }
+                    if detail.doneSetCount > 0 { saveOptions(detail) }
+                    // No dialog: it goes at once and Undo brings it back.
+                    Button("Discard workout", role: .destructive) { model.discard() }
                         .font(.link)
                         .foregroundStyle(Color.red)
                         .frame(maxWidth: .infinity, minHeight: 44)
@@ -58,14 +49,10 @@ struct FinishView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 16)
             }
-            .confirmationDialog("Discard this workout?", isPresented: $discarding, titleVisibility: .visible) {
-                Button("Discard workout", role: .destructive) { model.discard() }
-            } message: {
-                Text("None of its \(detail.doneSetCount) logged sets will be kept.")
-            }
             .safeAreaInset(edge: .bottom) {
                 Button("Save workout") { save(detail) }
                     .buttonStyle(.primary)
+                    .disabled(detail.doneSetCount == 0)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
             }
@@ -78,6 +65,27 @@ struct FinishView: View {
                 bodyKg = try? app.db.writer.read { try app.db.latestBodyKg($0) }
             }
         }
+    }
+
+    /// Health, template and a note: only when there's something to save.
+    @ViewBuilder private func saveOptions(_ detail: WorkoutDetail) -> some View {
+        VStack(spacing: 0) {
+            toggleRow("heart", "Save to Apple Health", detail: app.health.connected ? kcalText(detail) : "Turning this on connects Apple Health.", isOn: $saveToHealth)
+                .onChange(of: saveToHealth) { _, on in
+                    if on && !app.health.connected { Task { await app.health.connect() } }
+                }
+            Divider().overlay(Color.line).padding(.leading, 60)
+            toggleRow("list.bullet", "Save as a template", detail: nil, isOn: $saveTemplate)
+        }
+        .background(Color.s1, in: .rect(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
+        HStack(spacing: 12) {
+            Image(systemName: "line.3.horizontal").foregroundStyle(Color.tx3)
+            TextField("Add a note about today", text: $note, axis: .vertical).font(.body16)
+        }
+        .padding(16)
+        .background(Color.s1, in: .rect(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.line))
     }
 
     private func timeRange(_ start: Date) -> String {

@@ -113,14 +113,23 @@ nonisolated extension AppDatabase {
         }
     }
 
-    func removeExercise(_ weId: UUID, now: Date = Date()) throws {
+    @discardableResult
+    func removeExercise(_ weId: UUID, now: Date = Date()) throws -> [any SyncedRecord] {
         try writer.write { db in
-            guard let we = try WorkoutExercise.fetchOne(db, key: weId) else { return }
-            try we.tombstone(at: now).save(db)
-            for s in try LoggedSet.filter(Column("workoutExerciseId") == weId && Column("deleted") == false).fetchAll(db) {
-                try s.tombstone(at: now).save(db)
-            }
+            guard let we = try WorkoutExercise.fetchOne(db, key: weId) else { return [] }
+            return try Self.tombstone(exercise: we, in: db, at: now)
         }
+    }
+
+    /// Deletes an exercise from a workout with its sets; returns them as they were.
+    private static func tombstone(exercise we: WorkoutExercise, in db: Database, at now: Date) throws -> [any SyncedRecord] {
+        var gone: [any SyncedRecord] = [we]
+        try we.tombstone(at: now).save(db)
+        for s in try LoggedSet.filter(Column("workoutExerciseId") == we.id && Column("deleted") == false).fetchAll(db) {
+            gone.append(s)
+            try s.tombstone(at: now).save(db)
+        }
+        return gone
     }
 
     /// Remembers the unit for an exercise. Stored sets keep the unit they were typed in;
@@ -189,16 +198,17 @@ nonisolated extension AppDatabase {
     }
 
     /// Deletes a workout with its exercises and sets: discarding a running one, or deleting one from History.
-    func deleteWorkout(_ id: UUID, now: Date = Date()) throws {
+    /// Returns the rows as they were, so the delete can be undone with `restore`.
+    @discardableResult
+    func deleteWorkout(_ id: UUID, now: Date = Date()) throws -> [any SyncedRecord] {
         try writer.write { db in
-            guard let w = try Workout.fetchOne(db, key: id) else { return }
+            guard let w = try Workout.fetchOne(db, key: id) else { return [] }
+            var gone: [any SyncedRecord] = [w]
             try w.tombstone(at: now).save(db)
             for we in try WorkoutExercise.filter(Column("workoutId") == id && Column("deleted") == false).fetchAll(db) {
-                try we.tombstone(at: now).save(db)
-                for s in try LoggedSet.filter(Column("workoutExerciseId") == we.id && Column("deleted") == false).fetchAll(db) {
-                    try s.tombstone(at: now).save(db)
-                }
+                gone += try Self.tombstone(exercise: we, in: db, at: now)
             }
+            return gone
         }
     }
 
@@ -209,11 +219,24 @@ nonisolated extension AppDatabase {
         try writer.write { db in try t.save(db) }
     }
 
-    func deleteTemplate(_ id: UUID, now: Date = Date()) throws {
+    @discardableResult
+    func deleteTemplate(_ id: UUID, now: Date = Date()) throws -> [any SyncedRecord] {
         try writer.write { db in
-            guard let t = try Template.fetchOne(db, key: id) else { return }
+            guard let t = try Template.fetchOne(db, key: id) else { return [] }
             try t.tombstone(at: now).save(db)
+            return [t]
         }
+    }
+
+    /// Puts deleted rows back as they were, stamped now so the restore syncs too.
+    func restore(_ rows: [any SyncedRecord], now: Date = Date()) throws {
+        try writer.write { db in
+            for row in rows { try Self.put(row, in: db, at: now) }
+        }
+    }
+
+    private static func put<R: SyncedRecord>(_ row: R, in db: Database, at now: Date) throws {
+        try row.stamped(now, dirty: true).save(db)
     }
 
     /// A template from a workout's exercises, in order, supersets kept.

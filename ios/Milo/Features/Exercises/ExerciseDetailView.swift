@@ -12,7 +12,6 @@ struct ExerciseDetailView: View {
     /// Where a finger is on the chart; the nearest session is read out.
     @State private var scrubbing: Date?
     @State private var editing = false
-    @State private var deleting = false
 
     enum Metric: String, CaseIterable { case top = "Top set", volume = "Volume", e1rm = "Est. 1RM" }
 
@@ -64,18 +63,11 @@ struct ExerciseDetailView: View {
             .padding(.bottom, 24)
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { menu(p) }
+            ToolbarItem(placement: .topBarTrailing) {
+                menu(p).tint(Color.tx)
+            }
         }
         .sheet(isPresented: $editing) { ExerciseForm(exercise: e) }
-        .confirmationDialog("Delete \(e.name)?", isPresented: $deleting, titleVisibility: .visible) {
-            Button("Delete exercise", role: .destructive) {
-                try? app.db.deleteExercise(e.id)
-                app.edited()
-                dismiss()
-            }
-        } message: {
-            Text(deleteMessage(p))
-        }
     }
 
     /// "Machine. Chest, triceps, front shoulders."
@@ -307,10 +299,16 @@ struct ExerciseDetailView: View {
             if !p.exercise.builtin {
                 Divider()
                 Button("Edit exercise", systemImage: "pencil") { editing = true }
-                Button("Delete exercise", systemImage: "trash", role: .destructive) { deleting = true }
+                Button("Delete exercise", systemImage: "trash", role: .destructive) {
+                    if let rows = try? app.db.deleteExercise(p.exercise.id) {
+                        app.edited()
+                        app.offerUndo("Deleted \(p.exercise.name)", rows: rows)
+                    }
+                    dismiss()
+                }
             }
         } label: {
-            Image(systemName: "ellipsis")
+            Label("Exercise settings", systemImage: "ellipsis")
         }
         .accessibilityLabel("Exercise settings")
     }
@@ -323,13 +321,6 @@ struct ExerciseDetailView: View {
     private func setRest(_ seconds: Int, _ p: ExerciseProgress) {
         try? app.db.setRest(seconds, for: p.exercise.id)
         app.edited()
-    }
-
-    private func deleteMessage(_ p: ExerciseProgress) -> String {
-        var parts = ["It comes off your exercise list."]
-        if !p.sessions.isEmpty { parts.append("The \(p.sessions.count) \(p.sessions.count == 1 ? "workout" : "workouts") with it keep it.") }
-        if p.templateCount > 0 { parts.append("It stays in \(p.templateCount) \(p.templateCount == 1 ? "template" : "templates") until you take it out.") }
-        return parts.joined(separator: " ")
     }
 }
 

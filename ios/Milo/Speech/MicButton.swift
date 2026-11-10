@@ -23,9 +23,9 @@ struct MicButton: View {
         .sensoryFeedback(.impact(weight: .light), trigger: dictation.listening)
         .onChange(of: text) { _, now in
             // The message was sent, or cleared by hand.
-            if now.isEmpty, dictation.listening { dictation.stop() }
+            if now.isEmpty { dictation.stop(discardingLateResults: true) }
         }
-        .onDisappear { dictation.stop() }
+        .onDisappear { dictation.stop(discardingLateResults: true) }
         .alert("Can't listen", isPresented: Binding(get: { dictation.problem != nil }, set: { if !$0 { dictation.problem = nil } })) {
             Button("OK") {}
         } message: {

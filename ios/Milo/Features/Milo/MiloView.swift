@@ -54,16 +54,16 @@ struct MiloView: View {
             .miloScreen()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.tx) }.accessibilityLabel("Close")
+                    Button(role: .close) { dismiss() }.tint(Color.tx)
                 }
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 7) { BarMLogo(size: 16, working: session.busy); Text("Milo").font(.sofia(17, .bold)) }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button { path.append(ChatsRoute()) } label: { Image(systemName: "clock.arrow.circlepath").foregroundStyle(Color.tx) }
-                        .accessibilityLabel("Chats")
-                    Button { withAnimation(.settle) { session.reset() }; chip = app.miloContext.chip } label: { Image(systemName: "square.and.pencil").foregroundStyle(Color.tx) }
-                        .accessibilityLabel("New chat")
+                    Button { path.append(ChatsRoute()) } label: { Label("Chats", systemImage: "clock.arrow.circlepath") }
+                        .tint(Color.tx)
+                    Button { withAnimation(.settle) { session.reset() }; chip = app.miloContext.chip } label: { Label("New chat", systemImage: "square.and.pencil") }
+                        .tint(Color.tx)
                         .disabled(session.isEmpty)
                 }
             }
@@ -100,25 +100,42 @@ struct Conversation: View {
     var openExercise: ((UUID) -> Void)?
     var editTemplate: ((UUID) -> Void)?
 
+    /// One line of the conversation. What Milo read in a row is one line, not one per read.
+    private struct Row: Identifiable {
+        let id: String
+        let item: MiloSession.Item
+        var readings: [String] = []
+        let startsReply: Bool
+    }
+
+    private var rows: [Row] {
+        var rows: [Row] = []
+        for item in session.items {
+            let startsReply = rows.last.map { if case .user = $0.item { true } else { false } } ?? true
+            if case .reading(_, let summary) = item {
+                if let last = rows.indices.last, case .reading = rows[last].item {
+                    rows[last].readings.append(summary)
+                } else {
+                    rows.append(Row(id: item.id, item: item, readings: [summary], startsReply: startsReply))
+                }
+            } else {
+                rows.append(Row(id: item.id, item: item, startsReply: startsReply))
+            }
+        }
+        return rows
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    ForEach(Array(session.items.enumerated()), id: \.element.id) { i, item in
-                        let startsReply = i == 0 || { if case .user = session.items[i - 1] { return true } else { return false } }()
-                        row(item, startsReply: startsReply).id(item.id).transition(.arrive)
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    ForEach(rows) { row in
+                        self.row(row).id(row.id).transition(Self.arrival(row.item))
                     }
                     if session.isWorking {
-                        // Milo is reading or deciding: its mark moves until the next thing arrives.
-                        HStack(spacing: 7) {
-                            BarMLogo(size: 13, working: true)
-                            if case .user = session.items.last { Text("Milo").font(.sofia(13, .semibold)).foregroundStyle(Color.tx2) }
-                        }
-                        .padding(.horizontal, 4)
-                        .frame(height: 20)
-                        .transition(.opacity)
-                        .accessibilityElement()
-                        .accessibilityLabel("Milo is working")
+                        // Sits where the reply's "Milo" label will be, so when the answer starts
+                        // the words change in place and the text flows in below.
+                        ThinkingRow(reading: session.hasReadSinceAsking).transition(.opacity)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -135,26 +152,27 @@ struct Conversation: View {
         }
     }
 
-    @ViewBuilder private func row(_ item: MiloSession.Item, startsReply: Bool) -> some View {
-        switch item {
+    /// What you send rises from the message field into the conversation; Milo's side fades up.
+    private static func arrival(_ item: MiloSession.Item) -> AnyTransition {
+        guard case .user = item else { return .arrive }
+        return .asymmetric(
+            insertion: .opacity.combined(with: .offset(y: 28)).combined(with: .scale(scale: 0.96, anchor: .bottomTrailing)),
+            removal: .opacity)
+    }
+
+    @ViewBuilder private func row(_ row: Row) -> some View {
+        switch row.item {
         case .user(_, let text):
-            Text(text)
-                .font(.body16)
-                .padding(.horizontal, 15).padding(.vertical, 11)
-                .background(Color.s2, in: UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22, bottomTrailingRadius: 7, topTrailingRadius: 22))
-                .overlay(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22, bottomTrailingRadius: 7, topTrailingRadius: 22).strokeBorder(Color.line))
-                .frame(maxWidth: 292, alignment: .trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            UserBubble(text: text)
         case .reply(_, let text):
-            VStack(alignment: .leading, spacing: 8) {
-                if startsReply { MiloLabel() }
-                Text(LocalizedStringKey(text)).font(.body16).lineSpacing(3).padding(.horizontal, 4)
+            VStack(alignment: .leading, spacing: 10) {
+                if row.startsReply { MiloLabel() }
+                ReplyText(text: text)
             }
-        case .reading(_, let summary):
-            VStack(alignment: .leading, spacing: 8) {
-                if startsReply { MiloLabel() }
-                Label(summary, systemImage: summary.hasPrefix("Read") ? "doc.text" : "chart.line.uptrend.xyaxis")
-                    .font(.sofia(13.5, .medium)).foregroundStyle(Color.tx3).padding(.horizontal, 4)
+        case .reading:
+            VStack(alignment: .leading, spacing: 10) {
+                if row.startsReply { MiloLabel() }
+                ReadingsRow(summaries: row.readings)
             }
         case .card(let card):
             CardView(card: card, session: session, onAdded: onAdded, openRunning: openRunning, openWorkout: openWorkout, openExercise: openExercise, editTemplate: editTemplate)
@@ -165,9 +183,135 @@ struct Conversation: View {
     }
 }
 
-struct MiloLabel: View {
+/// What Milo read before it answered: the one thing it read, or how many, opening to the list.
+private struct ReadingsRow: View {
+    let summaries: [String]
+    @State private var open = false
+
     var body: some View {
-        HStack(spacing: 7) { BarMLogo(size: 13); Text("Milo").font(.sofia(13, .semibold)).foregroundStyle(Color.tx2) }
+        if summaries.count == 1 {
+            Label(summaries[0], systemImage: "doc.text")
+                .font(.sofia(13.5, .medium)).foregroundStyle(Color.tx3)
+                .padding(.horizontal, 4)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Button { withAnimation(.settle) { open.toggle() } } label: {
+                    HStack(spacing: 6) {
+                        Label("Read \(summaries.count) things from your log", systemImage: "doc.text.magnifyingglass")
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                    }
+                    .font(.sofia(13.5, .medium)).foregroundStyle(Color.tx3)
+                    .padding(.horizontal, 4)
+                    .frame(minHeight: 28)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.row)
+                .accessibilityValue(open ? "Shown" : "Hidden")
+                if open {
+                    VStack(alignment: .leading, spacing: 7) {
+                        ForEach(Array(summaries.enumerated()), id: \.offset) { _, summary in
+                            Text(summary)
+                        }
+                    }
+                    .font(.sofia(13.5)).foregroundStyle(Color.tx3)
+                    .padding(.leading, 14)
+                    .overlay(alignment: .leading) { Capsule().fill(Color.line2).frame(width: 2).padding(.leading, 4) }
+                    .transition(.opacity.combined(with: .offset(y: -4)))
+                }
+            }
+        }
+    }
+}
+
+/// Milo at work. Its bars move and a band of light runs across what it is doing, so a wait
+/// reads as thinking, not a frozen screen. After a few seconds the words own up to the wait.
+private struct ThinkingRow: View {
+    /// It has started reading from the log.
+    let reading: Bool
+    @State private var slow = false
+
+    private var words: String {
+        switch (reading, slow) {
+        case (false, false): "Thinking"
+        case (false, true): "Still thinking"
+        case (true, false): "Reading your log"
+        case (true, true): "Putting it together"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            BarMLogo(size: 13, working: true)
+            ShimmerText(text: words).id(words).transition(.opacity)
+        }
+        .padding(.horizontal, 4)
+        .frame(height: 20)
+        .animation(.settle, value: words)
+        .task(id: reading) {
+            slow = false
+            do {
+                try await Task.sleep(for: .seconds(6))
+                withAnimation(.settle) { slow = true }
+            } catch {}
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Milo: \(words)")
+    }
+}
+
+/// Text with a soft band of light passing over it, left to right. Still under Reduce Motion.
+private struct ShimmerText: View {
+    let text: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion)) { context in
+            Text(text)
+                .font(.sofia(13, .semibold))  // the reply's "Milo" label, which it turns into
+                .foregroundStyle(LinearGradient(stops: Self.stops(reduceMotion ? -1 : Self.phase(context.date)), startPoint: .leading, endPoint: .trailing))
+        }
+    }
+
+    /// Where the band is, from just off the left edge to just off the right, every 1.8 s.
+    private static func phase(_ date: Date) -> Double {
+        date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8 * 1.6 - 0.3
+    }
+
+    private static func stops(_ p: Double) -> [Gradient.Stop] {
+        func at(_ x: Double) -> Double { min(1, max(0, x)) }
+        return [
+            .init(color: .tx2, location: 0),
+            .init(color: .tx2, location: at(p - 0.22)),
+            .init(color: .tx, location: at(p)),
+            .init(color: .tx2, location: at(p + 0.22)),
+            .init(color: .tx2, location: 1),
+        ]
+    }
+}
+
+/// What you said to Milo, on the right.
+struct UserBubble: View {
+    let text: String
+
+    var body: some View {
+        let shape = UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22, bottomTrailingRadius: 7, topTrailingRadius: 22)
+        Text(text)
+            .font(.body16)
+            .padding(.horizontal, 15).padding(.vertical, 11)
+            .background(Color.s2, in: shape)
+            .overlay(shape.strokeBorder(Color.line))
+            .frame(maxWidth: 292, alignment: .trailing)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+}
+
+struct MiloLabel: View {
+    var working = false
+
+    var body: some View {
+        HStack(spacing: 7) { BarMLogo(size: 13, working: working); Text("Milo").font(.sofia(13, .semibold)).foregroundStyle(Color.tx2) }
             .padding(.horizontal, 4)
     }
 }

@@ -4,8 +4,6 @@ struct TodayView: View {
     @Environment(AppModel.self) private var app
     @State private var data = Live(TodayData())
     @State private var editingTemplate: Template?
-    @State private var discardingRunning = false
-    @State private var deletingTemplate: Template?
 
     struct TodayData: Sendable {
         var running: WorkoutDetail?
@@ -17,20 +15,13 @@ struct TodayView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ScreenHeader(eyebrow: Format.longDay(.now), title: "Today")
                 if let running = data.value.running {
                     LiveWorkoutCard(detail: running) { app.showingWorkout = true }
                         .workoutSource()
                         .contextMenu {
-                            Button("Discard workout", systemImage: "trash", role: .destructive) { discardingRunning = true }
-                        }
-                        .confirmationDialog("Discard this workout?", isPresented: $discardingRunning, titleVisibility: .visible) {
-                            Button("Discard workout", role: .destructive) {
-                                try? app.db.deleteWorkout(running.workout.id)
-                                app.edited()
+                            Button("Discard workout", systemImage: "trash", role: .destructive) {
+                                app.deleteWorkout(running.workout, message: "Workout discarded")
                             }
-                        } message: {
-                            Text("None of its \(running.doneSetCount) logged sets will be kept.")
                         }
                 } else {
                     WeekCard(workouts: data.value.lastWeek) { app.startWorkout() }
@@ -56,7 +47,7 @@ struct TodayView: View {
                                 .contextMenu {
                                     Button("Start workout", systemImage: "play") { app.startWorkout(template: t.template) }
                                     Button("Edit template", systemImage: "pencil") { editingTemplate = t.template }
-                                    Button("Delete template", systemImage: "trash", role: .destructive) { deletingTemplate = t.template }
+                                    Button("Delete template", systemImage: "trash", role: .destructive) { deleteTemplate(t.template) }
                                 }
                             }
                         }
@@ -88,21 +79,8 @@ struct TodayView: View {
         }
         .refreshable { await app.sync.sync() }
         .miloScreen()
-        .toolbarVisibility(.hidden, for: .navigationBar)
+        .tabTitle("Today", subtitle: Format.longDay(.now))
         .sheet(item: $editingTemplate) { TemplateEditor(template: $0) }
-        .confirmationDialog(
-            "Delete \(deletingTemplate?.name ?? "template")?",
-            isPresented: Binding(get: { deletingTemplate != nil }, set: { if !$0 { deletingTemplate = nil } }),
-            titleVisibility: .visible,
-            presenting: deletingTemplate
-        ) { t in
-            Button("Delete template", role: .destructive) {
-                try? app.db.deleteTemplate(t.id)
-                app.edited()
-            }
-        } message: { _ in
-            Text("Workouts you did from it stay in History.")
-        }
         .onAppear {
             app.miloContext = .today
             let db = app.db
@@ -116,6 +94,13 @@ struct TodayView: View {
                     lastWeek: finished.filter { $0.workout.startedAt >= weekAgo })
             }
         }
+    }
+
+    /// Deletes a template at once; Undo brings it back.
+    private func deleteTemplate(_ t: Template) {
+        guard let rows = try? app.db.deleteTemplate(t.id) else { return }
+        app.edited()
+        app.offerUndo("Deleted \(t.name)", rows: rows)
     }
 }
 

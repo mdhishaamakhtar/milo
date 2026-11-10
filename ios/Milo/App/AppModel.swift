@@ -25,6 +25,8 @@ final class AppModel {
     var workoutStartedByMilo = false
     /// What Milo is told about where the user is when they ask.
     var miloContext = MiloContext.today
+    /// The last delete, offered back for a few seconds instead of asking first.
+    var undo: Undo?
 
     init(db: AppDatabase) {
         self.db = db
@@ -58,15 +60,42 @@ final class AppModel {
     }
 }
 
+/// "Deleted Legs, Undo". Deletes happen at once and can be taken back, which is Apple's
+/// guidance for common destructive actions: undo, rather than a dialog before every one.
+struct Undo: Identifiable {
+    let id = UUID()
+    let message: String
+    let restore: () -> Void
+}
+
 extension AppModel {
-    /// Deletes a workout here and, if it was saved there, from Apple Health.
-    func deleteWorkout(_ workout: Workout) {
+    /// Deletes a workout here and, if it was saved there, from Apple Health. Undo puts it
+    /// back in both.
+    func deleteWorkout(_ workout: Workout, message: String? = nil) {
         do {
-            try db.deleteWorkout(workout.id)
+            let rows = try db.deleteWorkout(workout.id)
             Task { [health] in await health.remove(workout.healthUUID) }
             edited()
+            offerUndo(message ?? "Deleted \(workout.name)", rows: rows) { [health] in
+                if workout.healthUUID != nil { Task { await health.save(workoutID: workout.id) } }
+            }
         } catch {
             log.error("delete workout: \(error.localizedDescription)")
+        }
+    }
+
+    /// Shows the Undo bar for rows just deleted. `then` runs after they're back.
+    func offerUndo(_ message: String, rows: [any SyncedRecord], then: @escaping () -> Void = {}) {
+        guard !rows.isEmpty else { return }
+        undo = Undo(message: message) { [weak self] in
+            guard let self else { return }
+            do {
+                try db.restore(rows)
+                then()
+                edited()
+            } catch {
+                log.error("undo: \(error.localizedDescription)")
+            }
         }
     }
 }

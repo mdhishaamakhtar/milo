@@ -25,8 +25,6 @@ final class WorkoutModel {
     var restTotal: TimeInterval = 60
     var restForSet = 0
     var query = ""
-    /// An exercise with logged sets waiting for "Remove" to be confirmed.
-    var removing: ExerciseEntry?
 
     struct Editing: Equatable {
         enum Field { case weight, reps, seconds }
@@ -101,17 +99,13 @@ final class WorkoutModel {
         app.edited()
     }
 
-    /// Removes an exercise straight away if nothing was logged, else asks first.
-    func askRemove(_ entry: ExerciseEntry) {
-        if entry.doneSets.isEmpty { remove(entry) } else { removing = entry }
-    }
-
+    /// Takes an exercise out at once. If sets were logged, Undo brings it back with them.
     func remove(_ entry: ExerciseEntry) {
         if let editing, entry.sets.contains(where: { $0.id == editing.setID }) { closePad() }
-        try? app.db.removeExercise(entry.id)
+        guard let rows = try? app.db.removeExercise(entry.id) else { return }
         if openID == entry.id { openID = nil }
-        removing = nil
         app.edited()
+        if !entry.doneSets.isEmpty { app.offerUndo("Removed \(entry.exercise.shortName)", rows: rows) }
     }
 
     /// Saves edits to a finished workout, and updates Health if it was saved there.
@@ -127,13 +121,12 @@ final class WorkoutModel {
         }
     }
 
-    /// Throws the whole workout away.
+    /// Throws the whole workout away. Undo brings it back, still running.
     func discard() {
         guard let w = detail.value?.workout else { return }
         closePad()
         restEndsAt = nil
-        try? app.db.deleteWorkout(w.id)
-        app.edited()
+        app.deleteWorkout(w, message: "Workout discarded")
     }
 
     func setUnit(_ unit: WeightUnit, for entry: ExerciseEntry) {

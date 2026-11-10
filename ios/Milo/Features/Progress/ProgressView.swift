@@ -9,7 +9,6 @@ struct ProgressTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ScreenHeader(eyebrow: "Last 12 weeks", title: "Progress")
                 WeeksCard(weeks: data.value.weeks)
 
                 SectionHeader("New bests")
@@ -65,7 +64,7 @@ struct ProgressTab: View {
         }
         .refreshable { await app.sync.sync() }
         .miloScreen()
-        .toolbarVisibility(.hidden, for: .navigationBar)
+        .tabTitle("Progress", subtitle: "Last 12 weeks")
         .onAppear {
             app.miloContext = .progress
             let db = app.db

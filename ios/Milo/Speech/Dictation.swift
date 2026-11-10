@@ -14,6 +14,9 @@ final class Dictation {
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
     @ObservationIgnored private var task: SFSpeechRecognitionTask?
+    /// The listening session whose results may still land in the field. The recogniser
+    /// sends a last result after it stops; once a message is sent, that must not refill it.
+    @ObservationIgnored private var listeningID: UUID?
 
     /// Starts listening. `heard` gets everything said so far each time it grows.
     func start(heard: @escaping @MainActor (String) -> Void) async {
@@ -42,7 +45,16 @@ final class Dictation {
             engine.prepare()
             try engine.start()
             self.request = request
-            task = Self.recognise(request, with: recognizer, heard: heard) { [weak self] in self?.stop() }
+            let id = UUID()
+            listeningID = id
+            task = Self.recognise(request, with: recognizer, heard: { [weak self] text in
+                guard self?.listeningID == id else { return }
+                heard(text)
+            }, ended: { [weak self] in
+                guard let self, listeningID == id else { return }
+                listeningID = nil
+                stop()
+            })
             listening = true
         } catch {
             log.error("dictation: \(error.localizedDescription, privacy: .public)")
@@ -51,7 +63,10 @@ final class Dictation {
         }
     }
 
-    func stop() {
+    /// Stops listening. When the text was sent or cleared, `discardingLateResults` drops the
+    /// recogniser's last result; when the person stopped it, that last result still lands.
+    func stop(discardingLateResults: Bool = false) {
+        if discardingLateResults { listeningID = nil }
         guard listening || engine.isRunning else { return }
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)

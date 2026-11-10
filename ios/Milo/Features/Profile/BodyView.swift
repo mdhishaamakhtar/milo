@@ -40,7 +40,7 @@ struct BodyView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Add a reading")
+                Button { adding = true } label: { Label("Add a reading", systemImage: "plus") }.tint(Color.tx)
             }
         }
         .sheet(isPresented: $adding) { AddReadingSheet(unit: unit) }

@@ -8,6 +8,8 @@ struct ProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var data = Live(ProfileData())
     @State private var signingOut = false
+    /// Syncing and signing out after you confirm.
+    @State private var leaving = false
 
     struct ProfileData: Sendable {
         var settings = UserSettings.fresh
@@ -62,10 +64,23 @@ struct ProfileView: View {
                 }
                 .listRowBackground(Color.s1)
                 Section {
-                    Button("Sign out", role: .destructive) { signingOut = true }
-                        .font(.sofia(16, .semibold))
-                        .foregroundStyle(Color.red)
-                        .frame(maxWidth: .infinity)
+                    Button(role: .destructive) { signingOut = true } label: {
+                        if leaving {
+                            HStack(spacing: 10) { ProgressView().tint(Color.red); Text("Signing out") }
+                        } else {
+                            Text("Sign out")
+                        }
+                    }
+                    .font(.sofia(16, .semibold))
+                    .foregroundStyle(Color.red)
+                    .frame(maxWidth: .infinity)
+                    .disabled(leaving)
+                    // On the button, so the dialog grows out of it rather than appearing mid-screen.
+                    .confirmationDialog("Sign out of Milo?", isPresented: $signingOut, titleVisibility: .visible) {
+                        Button("Sign out", role: .destructive, action: signOut)
+                    } message: {
+                        Text("Your workouts stay saved. Anything not synced yet goes up first.")
+                    }
                 }
                 .listRowBackground(Color.s1)
                 Section {
@@ -90,12 +105,8 @@ struct ProfileView: View {
             .miloScreen()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.tint(Color.tx) }
-            }
-            .confirmationDialog("Sign out of Milo?", isPresented: $signingOut, titleVisibility: .visible) {
-                Button("Sign out", role: .destructive, action: signOut)
-            } message: {
-                Text("Your workouts stay saved. Anything not synced yet goes up first.")
+                // Nothing to save here (settings apply as you change them), so the standard Close.
+                ToolbarItem(placement: .cancellationAction) { Button(role: .close) { dismiss() }.tint(Color.tx) }
             }
         }
         .tint(.or)
@@ -145,13 +156,17 @@ struct ProfileView: View {
         app.edited()
     }
 
+    /// Syncs, signs out on the server, then lets this sheet slide away before the app
+    /// fades to the sign-in screen, so the two never move at once.
     private func signOut() {
+        withAnimation(.quick) { leaving = true }
         Task {
             await app.sync.sync()
             _ = await app.api.auth.logout(request: Milo_LogoutRequest(), headers: APIClient.headers(app.session.token))
+            dismiss()
+            try? await Task.sleep(for: .milliseconds(450))
             app.milo.reset()
             app.session.signOut()
-            dismiss()
         }
     }
 }

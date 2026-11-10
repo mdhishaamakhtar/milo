@@ -33,7 +33,6 @@ private struct WorkoutScreen: View {
     let milo: MiloSession
     @State private var talking = false
     @State private var finishing = false
-    @State private var discarding = false
     @State private var droppingUnticked = false
     /// The screen underneath's Milo context, handed back on the way out.
     @State private var previousContext: MiloContext?
@@ -54,19 +53,10 @@ private struct WorkoutScreen: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .navigationDestination(isPresented: $finishing) { FinishView() }
         }
+        .undoBar(above: 84)
         .onChange(of: model.detail.value == nil) { _, gone in if gone { dismiss() } }
         // An exercise went in: put the keyboard away so its sets show.
         .onChange(of: model.entries.count) { old, new in if new > old { fieldFocused = false } }
-        .confirmationDialog(
-            "Remove \(model.removing?.exercise.shortName ?? "this exercise")?",
-            isPresented: Binding(get: { model.removing != nil }, set: { if !$0 { model.removing = nil } }),
-            titleVisibility: .visible,
-            presenting: model.removing
-        ) { entry in
-            Button("Remove from workout", role: .destructive) { model.remove(entry) }
-        } message: { entry in
-            Text("Its \(entry.doneSets.count) logged \(entry.doneSets.count == 1 ? "set goes" : "sets go") too.")
-        }
         .onAppear {
             previousContext = app.miloContext
             if let w = model.detail.value?.workout {
@@ -113,6 +103,9 @@ private struct WorkoutScreen: View {
         if model.editing != nil {
             NumberPad().transition(.move(edge: .bottom).combined(with: .opacity))
         } else {
+            // The rest timer and the add field are glass side by side: one container lets them
+            // render together and the timer grow out of the field.
+            GlassEffectContainer(spacing: 8) {
             VStack(spacing: 8) {
                 if let end = model.restEndsAt, !talking {
                     RestBar(endsAt: end).transition(.move(edge: .bottom).combined(with: .opacity))
@@ -122,6 +115,7 @@ private struct WorkoutScreen: View {
                     focused: $fieldFocused,
                     ask: ask)
             }
+            }
             .padding(.horizontal, 14)
             .padding(.bottom, 6)
         }
@@ -129,13 +123,14 @@ private struct WorkoutScreen: View {
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            if talking {
-                Button { withAnimation(.settle) { talking = false } } label: { Image(systemName: "chevron.left").foregroundStyle(Color.tx) }
-                    .accessibilityLabel("Back to the exercises")
-            } else if !model.isPast {
-                Button { dismiss() } label: { Image(systemName: "chevron.down").foregroundStyle(Color.tx) }
-                    .accessibilityLabel("Minimise workout")
+            Group {
+                if talking {
+                    Button { withAnimation(.settle) { talking = false } } label: { Label("Back to the exercises", systemImage: "chevron.left") }
+                } else if !model.isPast {
+                    Button { dismiss() } label: { Label("Minimise workout", systemImage: "chevron.down") }
+                }
             }
+            .tint(Color.tx)
         }
         ToolbarItem(placement: .principal) {
             if let w = model.detail.value?.workout {
@@ -154,31 +149,32 @@ private struct WorkoutScreen: View {
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            if model.isPast {
-                Button("Done") {
-                    if model.untickedCount > 0 { droppingUnticked = true } else { model.saveEdits(); dismiss() }
-                }
-                .font(.sofia(16, .bold))
-                .tint(Color.tx)
-                .confirmationDialog("\(model.untickedCount) \(model.untickedCount == 1 ? "set isn't" : "sets aren't") ticked", isPresented: $droppingUnticked, titleVisibility: .visible) {
-                    Button("Save without them") { model.saveEdits(); dismiss() }
-                    Button("Keep editing", role: .cancel) {}
-                } message: {
-                    Text("Only ticked sets are kept.")
-                }
-            } else {
-                Button("Finish") {
-                    model.closePad()
-                    // With nothing ticked there's nothing to save: offer to throw it away instead.
-                    if model.detail.value?.doneSetCount == 0 { discarding = true } else { finishing = true }
-                }
-                .font(.sofia(16, .bold))
-                .tint(Color.tx)
-                .confirmationDialog("No sets ticked yet", isPresented: $discarding, titleVisibility: .visible) {
-                    Button("Discard workout", role: .destructive) { model.discard() }
-                    Button("Keep going", role: .cancel) {}
-                } message: {
-                    Text("Tick the sets you did to save them, or discard this workout.")
+            Group {
+                if model.isPast {
+                    Button("Done") {
+                        if model.untickedCount > 0 { droppingUnticked = true } else { model.saveEdits(); dismiss() }
+                    }
+                    .font(.sofia(16, .bold))
+                    .buttonStyle(.glassProminent)
+                    .tint(Color.tx)
+                    .foregroundStyle(Color.bg)
+                    .confirmationDialog("\(model.untickedCount) \(model.untickedCount == 1 ? "set isn't" : "sets aren't") ticked", isPresented: $droppingUnticked, titleVisibility: .visible) {
+                        Button("Save without them") { model.saveEdits(); dismiss() }
+                        Button("Keep editing", role: .cancel) {}
+                    } message: {
+                        Text("Only ticked sets are kept.")
+                    }
+                } else {
+                    // Always straight to the Finish screen: no pop-up to dismiss and re-tap.
+                    // With nothing ticked, that screen says so and offers Discard.
+                    Button("Finish") {
+                        model.closePad()
+                        finishing = true
+                    }
+                    .font(.sofia(16, .bold))
+                    .buttonStyle(.glassProminent)
+                    .tint(Color.tx)
+                    .foregroundStyle(Color.bg)
                 }
             }
         }
@@ -298,7 +294,7 @@ private struct FinishedCard: View {
                 }
                 .buttonStyle(.row)
                 .background(Color.s1)
-                .swipeToDelete("Remove from workout", cornerRadius: 0) { model.askRemove(e) }
+                .swipeToDelete("Remove from workout", cornerRadius: 0) { model.remove(e) }
                 .contextMenu { RemoveButton(entry: e) }
             }
         }
@@ -314,7 +310,7 @@ private struct RemoveButton: View {
     let entry: ExerciseEntry
 
     var body: some View {
-        Button("Remove from workout", systemImage: "trash", role: .destructive) { model.askRemove(entry) }
+        Button("Remove from workout", systemImage: "trash", role: .destructive) { model.remove(entry) }
     }
 }
 
@@ -337,7 +333,7 @@ private struct UpNext: View {
                 }
                 .buttonStyle(.row)
                 .background(Color.bg)
-                .swipeToDelete("Remove from workout") { model.askRemove(e) }
+                .swipeToDelete("Remove from workout") { model.remove(e) }
                 .contextMenu { RemoveButton(entry: e) }
             }
         }

@@ -33,6 +33,18 @@ enum Radius {
     static let well: CGFloat = 13
 }
 
+
+extension UIFont {
+    /// Sofia Sans for the UIKit pieces SwiftUI can't style, like navigation bar titles.
+    static func sofia(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont {
+        let descriptor = UIFontDescriptor(fontAttributes: [
+            .family: "Sofia Sans",
+            .traits: [UIFontDescriptor.TraitKey.weight: weight],
+        ])
+        return UIFont(descriptor: descriptor, size: size)
+    }
+}
+
 // Milo's motion: quick and settled, never bouncy. Named once so every screen moves alike.
 extension Animation {
     /// A control answering a touch: a tick, a switch, a key.
@@ -79,9 +91,23 @@ extension View {
             .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.line))
     }
 
-    /// Screen background that runs under the bars.
+    /// Screen background that runs under the bars. The ground deepens toward the top and
+    /// bottom edges, where the glass sits. Every piece of glass in the app is Apple's one
+    /// standard glass and takes its colour from what's behind it, so over this it all reads
+    /// as the same dark glass instead of a grey slab.
     func miloScreen() -> some View {
-        self.background(Color.bg.ignoresSafeArea())
-            .foregroundStyle(Color.tx)
+        self.background {
+            Color.bg
+                .overlay(alignment: .top) {
+                    LinearGradient(colors: [.black.opacity(0.7), .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 200)
+                }
+                .overlay(alignment: .bottom) {
+                    LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 260)
+                }
+                .ignoresSafeArea()
+        }
+        .foregroundStyle(Color.tx)
     }
 }

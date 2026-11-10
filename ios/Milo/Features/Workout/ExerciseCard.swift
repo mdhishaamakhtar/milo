@@ -19,7 +19,7 @@ struct ExerciseCard: View {
                 if entry.exercise.approximate { Badge(text: "Approximate") }
                 Spacer()
                 Menu {
-                    Button("Remove from workout", systemImage: "trash", role: .destructive) { model.askRemove(entry) }
+                    Button("Remove from workout", systemImage: "trash", role: .destructive) { model.remove(entry) }
                 } label: {
                     Image(systemName: "ellipsis").font(.system(size: 17, weight: .semibold)).foregroundStyle(Color.tx2)
                         .frame(width: 36, height: 30)

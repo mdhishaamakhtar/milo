@@ -16,7 +16,6 @@ struct TemplateEditor: View {
     @State private var query = ""
     @State private var creating: String?
     @State private var confirmingCancel = false
-    @State private var deleting = false
     @FocusState private var naming: Bool
     @FocusState private var adding: Bool
 
@@ -47,20 +46,9 @@ struct TemplateEditor: View {
                 SheetToolbar(
                     canSave: !trimmedName.isEmpty && !template.items.isEmpty,
                     cancel: { if hasChanges { confirmingCancel = true } else { dismiss() } },
-                    save: save)
-            }
-            .confirmationDialog("Discard your changes?", isPresented: $confirmingCancel, titleVisibility: .visible) {
-                Button("Discard changes", role: .destructive) { dismiss() }
-                Button("Keep editing", role: .cancel) {}
-            }
-            .confirmationDialog("Delete \(original.name)?", isPresented: $deleting, titleVisibility: .visible) {
-                Button("Delete template", role: .destructive) {
-                    try? app.db.deleteTemplate(template.id)
-                    app.edited()
-                    dismiss()
-                }
-            } message: {
-                Text("Workouts you did from it stay in History.")
+                    save: save,
+                    discarding: $confirmingCancel,
+                    discard: { dismiss() })
             }
             .sheet(item: Binding(get: { creating.map(NewName.init) }, set: { creating = $0?.name })) { new in
                 ExerciseForm(suggestedName: new.name) { add($0.id) }
@@ -87,16 +75,14 @@ struct TemplateEditor: View {
 
     @ViewBuilder private var editing: some View {
         Section {
+            // A plain row like the ones below: the list draws its shape, so there's no second
+            // border fighting the section's corners. The orange caret shows it's being edited.
             TextField("Template name, e.g. Pull day", text: $template.name)
                 .font(.sofia(18, .semibold))
                 .focused($naming)
                 .submitLabel(.done)
-                .padding(.horizontal, 16)
-                .frame(height: 54)
-                .background(Color.s1, in: .rect(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(naming ? Color.or : Color.line, lineWidth: naming ? 1.5 : 1))
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
+                .frame(minHeight: 54)
+                .listRowBackground(Color.s1)
         } footer: {
             Text("A template is only the list. Sets and weights fill in from the last time you did each exercise.")
                 .font(.sofia(14)).foregroundStyle(Color.tx2)
@@ -144,10 +130,16 @@ struct TemplateEditor: View {
 
         if !isNew {
             Section {
-                Button("Delete template", role: .destructive) { deleting = true }
-                    .font(.link)
-                    .foregroundStyle(Color.red)
-                    .listRowBackground(Color.s1)
+                Button("Delete template", role: .destructive) {
+                    if let rows = try? app.db.deleteTemplate(template.id) {
+                        app.edited()
+                        app.offerUndo("Deleted \(original.name)", rows: rows)
+                    }
+                    dismiss()
+                }
+                .font(.link)
+                .foregroundStyle(Color.red)
+                .listRowBackground(Color.s1)
             }
         }
     }

@@ -2,19 +2,32 @@ import SwiftUI
 
 // Milo's buttons. Each answers a touch: none is silent under the finger.
 
-/// Off-white primary button with dark text, full width.
+/// Off-white primary button with dark text, full width. Dimmed while it can't be pressed.
 struct PrimaryButtonStyle: ButtonStyle {
     var compact = false
     /// Red, for a button that deletes.
     var destructive = false
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(compact ? .buttonSmall : .button)
-            .foregroundStyle(destructive ? Color.white : Color.bg)
-            .frame(maxWidth: .infinity, minHeight: compact ? 46 : 54)
-            .background((destructive ? Color.red : Color.tx).opacity(configuration.isPressed ? 0.85 : 1), in: .capsule)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.quick, value: configuration.isPressed)
+        Styled(configuration: configuration, compact: compact, destructive: destructive)
+    }
+
+    private struct Styled: View {
+        let configuration: Configuration
+        let compact: Bool
+        let destructive: Bool
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            configuration.label
+                .font(compact ? .buttonSmall : .button)
+                .foregroundStyle(destructive ? Color.white : Color.bg)
+                .frame(maxWidth: .infinity, minHeight: compact ? 46 : 54)
+                .background((destructive ? Color.red : Color.tx).opacity(configuration.isPressed ? 0.85 : 1), in: .capsule)
+                .opacity(isEnabled ? 1 : 0.35)
+                .scaleEffect(configuration.isPressed ? 0.98 : 1)
+                .animation(.quick, value: configuration.isPressed)
+                .animation(.quick, value: isEnabled)
+        }
     }
 }
 

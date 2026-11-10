@@ -75,24 +75,6 @@ struct BarMLogo: View {
     }
 }
 
-/// The round avatar that opens Profile.
-struct AvatarButton: View {
-    let initial: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(initial)
-                .font(.sofia(16, .bold))
-                .frame(width: 44, height: 44)
-                .background(Color.s2, in: .circle)
-                .overlay(Circle().strokeBorder(Color.line2))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Profile")
-    }
-}
-
 /// kg | lb switch.
 struct UnitSwitch: View {
     @Binding var unit: WeightUnit
@@ -146,10 +128,19 @@ struct SheetToolbar: ToolbarContent {
     var canSave = true
     let cancel: () -> Void
     let save: () -> Void
+    /// Set by `cancel` when there are changes to lose; asks before `discard`.
+    var discarding: Binding<Bool> = .constant(false)
+    var discard: () -> Void = {}
 
     var body: some ToolbarContent {
+        // A round ✕, the way iOS sheets cancel.
         ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel", action: cancel).tint(Color.tx)
+            Button(role: .cancel, action: cancel)
+                .tint(Color.tx)
+                .confirmationDialog("Discard your changes?", isPresented: discarding, titleVisibility: .visible) {
+                    Button("Discard changes", role: .destructive, action: discard)
+                    Button("Keep editing", role: .cancel) {}
+                }
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(saveTitle, action: save)
@@ -158,5 +149,50 @@ struct SheetToolbar: ToolbarContent {
                 .foregroundStyle(Color.bg)
                 .disabled(!canSave)
         }
+    }
+}
+
+extension View {
+    /// The Undo bar for the last delete, floating `above` points over the bottom edge.
+    func undoBar(above: CGFloat) -> some View { modifier(UndoBar(above: above)) }
+}
+
+/// "Deleted Legs, Undo" on glass, for five seconds after a delete. It's a control floating
+/// over content, which is where Liquid Glass belongs.
+private struct UndoBar: ViewModifier {
+    @Environment(AppModel.self) private var app
+    let above: CGFloat
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .bottom) {
+            if let undo = app.undo {
+                HStack(spacing: 12) {
+                    Text(undo.message).font(.sofia(15.5, .medium)).lineLimit(1)
+                    Spacer(minLength: 8)
+                    Button("Undo") {
+                        withAnimation(.settle) { app.undo = nil }
+                        undo.restore()
+                    }
+                    .font(.sofia(15.5, .bold))
+                    .foregroundStyle(Color.or)
+                    .frame(minWidth: 44, minHeight: 44)
+                }
+                .padding(.leading, 20)
+                .padding(.trailing, 12)
+                .frame(height: 52)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .padding(.horizontal, 16)
+                .padding(.bottom, above)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .task(id: undo.id) {
+                    do {
+                        try await Task.sleep(for: .seconds(5))
+                        if app.undo?.id == undo.id { withAnimation(.settle) { app.undo = nil } }
+                    } catch {}
+                }
+            }
+        }
+        .animation(.settle, value: app.undo?.id)
+        .sensoryFeedback(.impact(weight: .light), trigger: app.undo?.id) { _, now in now != nil }
     }
 }

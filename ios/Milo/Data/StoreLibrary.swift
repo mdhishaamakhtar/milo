@@ -85,10 +85,12 @@ nonisolated extension AppDatabase {
     }
 
     /// Takes one of your exercises off your list. Past workouts keep showing it.
-    func deleteExercise(_ id: UUID, now: Date = Date()) throws {
+    @discardableResult
+    func deleteExercise(_ id: UUID, now: Date = Date()) throws -> [any SyncedRecord] {
         try writer.write { db in
-            guard let e = try Exercise.fetchOne(db, key: id), !e.builtin else { return }
+            guard let e = try Exercise.fetchOne(db, key: id), !e.builtin else { return [] }
             try e.tombstone(at: now).save(db)
+            return [e]
         }
     }
 }

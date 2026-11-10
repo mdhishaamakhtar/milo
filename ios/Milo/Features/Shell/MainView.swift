@@ -25,6 +25,7 @@ struct MainView: View {
             AskMiloBar(prompt: app.miloContext.prompt) { app.showingMilo = true }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .undoBar(above: 132)
         .environment(\.workoutSpace, workoutSpace)
         // The workout grows out of its card on Today and tucks back into it.
         .fullScreenCover(isPresented: $app.showingWorkout) {
@@ -39,12 +40,14 @@ struct MainView: View {
 struct AskMiloBar: View {
     let prompt: String
     let open: () -> Void
+    /// Above the tab bar it shows the full prompt; beside a minimised tab bar, just "Ask Milo".
+    @Environment(\.tabViewBottomAccessoryPlacement) private var placement
 
     var body: some View {
         Button(action: open) {
             HStack(spacing: 11) {
                 BarMLogo(size: 18)
-                Text(prompt)
+                Text(placement == .inline ? "Ask Milo" : prompt)
                     .font(.sofia(16.5, .regular))
                     .foregroundStyle(Color.tx2)
                     .lineLimit(1)
@@ -101,40 +104,28 @@ extension View {
     }
 }
 
-/// Large title with a small line above it, and the avatar (or another button).
-struct ScreenHeader<Trailing: View>: View {
-    let eyebrow: String
-    let title: String
-    @ViewBuilder var trailing: Trailing
-
-    var body: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(eyebrow).font(.sub).foregroundStyle(Color.tx2)
-                Text(title).font(.large).tracking(-0.75)
-            }
-            Spacer()
-            trailing.padding(.bottom, 2)
-        }
-        .padding(.horizontal, 4)
-        .padding(.top, 8)
-        .padding(.bottom, 18)
-    }
-}
-
-extension ScreenHeader where Trailing == ProfileAvatar {
-    init(eyebrow: String, title: String) {
-        self.init(eyebrow: eyebrow, title: title) { ProfileAvatar() }
-    }
-}
-
-/// The signed-in user's initial; opens Profile.
-struct ProfileAvatar: View {
+/// The signed-in user's initial on the toolbar's glass, top trailing on each tab: it opens Profile.
+struct ProfileToolbarItem: ToolbarContent {
     @Environment(AppModel.self) private var app
 
-    var body: some View {
-        AvatarButton(initial: String(app.session.user?.username.prefix(1).uppercased() ?? "M")) {
-            app.showingProfile = true
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { app.showingProfile = true } label: {
+                Text(app.session.user?.username.prefix(1).uppercased() ?? "M")
+                    .font(.sofia(17, .bold))
+            }
+            .tint(Color.tx)
+            .accessibilityLabel("Profile")
         }
+    }
+}
+
+extension View {
+    /// A top-level tab's standard navigation bar: a large title that shrinks as you scroll,
+    /// a line under it, and Profile at the trailing edge.
+    func tabTitle(_ title: String, subtitle: String) -> some View {
+        navigationTitle(title)
+            .navigationSubtitle(subtitle)
+            .toolbar { ProfileToolbarItem() }
     }
 }

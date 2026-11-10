@@ -86,15 +86,15 @@ struct DeleteAccountView: View {
                 Button(working ? "Deleting" : "Delete my account", role: .destructive) { confirming = true }
                     .foregroundStyle(Color.red)
                     .disabled(password.isEmpty || working)
+                    .confirmationDialog("Delete your account for good?", isPresented: $confirming, titleVisibility: .visible) {
+                        Button("Delete account and all data", role: .destructive, action: delete)
+                    } message: {
+                        Text("Workouts saved to Apple Health stay in Health.")
+                    }
             }
         }
         .navigationTitle("Delete account")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Delete your account for good?", isPresented: $confirming, titleVisibility: .visible) {
-            Button("Delete account and all data", role: .destructive, action: delete)
-        } message: {
-            Text("Workouts saved to Apple Health stay in Health.")
-        }
     }
 
     private func delete() {

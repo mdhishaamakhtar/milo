@@ -9,7 +9,6 @@ struct ExercisesView: View {
     @State private var filter = Filter.all
     @State private var creating = false
     @State private var editing: Exercise?
-    @State private var deleting: Exercise?
 
     enum Filter: String, CaseIterable {
         case all = "All", yours = "Yours", chest = "Chest", back = "Back", legs = "Legs"
@@ -62,29 +61,23 @@ struct ExercisesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { creating = true } label: { Image(systemName: "plus") }.accessibilityLabel("New exercise")
+                Button { creating = true } label: { Label("New exercise", systemImage: "plus") }.tint(Color.tx)
             }
         }
         .sheet(isPresented: $creating) { ExerciseForm(suggestedName: query) }
         .sheet(item: $editing) { ExerciseForm(exercise: $0) }
-        .confirmationDialog(
-            "Delete \(deleting?.name ?? "exercise")?",
-            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-            titleVisibility: .visible,
-            presenting: deleting
-        ) { e in
-            Button("Delete exercise", role: .destructive) {
-                try? app.db.deleteExercise(e.id)
-                app.edited()
-            }
-        } message: { _ in
-            Text("It comes off your exercise list. Workouts with it keep it.")
-        }
         .onAppear {
             app.miloContext = MiloContext(screen: "exercises", prompt: "Describe an exercise to add it")
             let db = app.db
             rows.watch(db) { try db.exerciseRows($0) }
         }
+    }
+
+    /// Deletes one of your exercises at once; Undo brings it back.
+    private func delete(_ e: Exercise) {
+        guard let rows = try? app.db.deleteExercise(e.id) else { return }
+        app.edited()
+        app.offerUndo("Deleted \(e.name)", rows: rows)
     }
 
     private var search: some View {
@@ -147,10 +140,10 @@ struct ExercisesView: View {
             link
         } else {
             link
-                .swipeToDelete("Delete exercise", cornerRadius: 0) { deleting = row.exercise }
+                .swipeToDelete("Delete exercise", cornerRadius: 0) { delete(row.exercise) }
                 .contextMenu {
                     Button("Edit exercise", systemImage: "pencil") { editing = row.exercise }
-                    Button("Delete exercise", systemImage: "trash", role: .destructive) { deleting = row.exercise }
+                    Button("Delete exercise", systemImage: "trash", role: .destructive) { delete(row.exercise) }
                 }
         }
     }

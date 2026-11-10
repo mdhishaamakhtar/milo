@@ -7,7 +7,6 @@ struct WorkoutDetailView: View {
     let workoutID: UUID
     @State private var data = Live(DetailData())
     @State private var editing = false
-    @State private var deleting: WorkoutSummary?
     @State private var renaming = false
     @State private var newName = ""
     @State private var templateDraft: Template?
@@ -82,8 +81,9 @@ struct WorkoutDetailView: View {
         .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: shareText(d)) { Image(systemName: "square.and.arrow.up") }
-                    .accessibilityLabel("Share workout")
+                // A Label, not a bare Image, so the toolbar centres the symbol the way it does its own.
+                ShareLink(item: shareText(d)) { Label("Share workout", systemImage: "square.and.arrow.up") }
+                    .tint(Color.tx)
             }
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
@@ -93,16 +93,15 @@ struct WorkoutDetailView: View {
                     Button("Do it again", systemImage: "play") { app.startWorkout(copying: d.workout.id) }
                     Button("Save as template", systemImage: "line.3.horizontal") { templateDraft = draft(d) }
                     Divider()
-                    Button("Delete workout", systemImage: "trash", role: .destructive) { deleting = summary(d) }
+                    Button("Delete workout", systemImage: "trash", role: .destructive) { app.deleteWorkout(d.workout); dismiss() }
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Label("More", systemImage: "ellipsis")
                 }
-                .accessibilityLabel("More")
+                .tint(Color.tx)
             }
         }
         .fullScreenCover(isPresented: $editing) { WorkoutView(workoutID: d.workout.id) }
         .sheet(item: $templateDraft) { TemplateEditor(template: $0) }
-        .deleteWorkoutDialog($deleting) { dismiss() }
         .alert("Rename workout", isPresented: $renaming) {
             TextField("Name", text: $newName)
             Button("Save") { rename(d.workout) }
@@ -146,10 +145,6 @@ struct WorkoutDetailView: View {
             id: UUID(), name: d.workout.name, notes: "",
             items: d.entries.map { TemplateItem(exerciseId: $0.exercise.id, groupLabel: $0.we.groupLabel) },
             updatedAt: .now, deleted: false, dirty: true)
-    }
-
-    private func summary(_ d: WorkoutDetail) -> WorkoutSummary {
-        WorkoutSummary(workout: d.workout, exerciseNames: d.entries.map(\.exercise.name), doneSets: d.doneSetCount, volumeKg: d.volumeKg)
     }
 
     private func minutes(_ w: Workout) -> Int {

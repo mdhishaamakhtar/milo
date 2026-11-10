@@ -50,6 +50,12 @@ final class MiloSession {
         return true
     }
 
+    /// Milo has read from the log since the last message: the wait is it going through it.
+    var hasReadSinceAsking: Bool {
+        guard let asked = items.lastIndex(where: { if case .user = $0 { true } else { false } }) else { return false }
+        return items[(asked + 1)...].contains { if case .reading = $0 { true } else { false } }
+    }
+
     func state(_ card: Milo_Card) -> CardState { cardStates[card.id] ?? .pending }
 
     // MARK: Talking

@@ -6,28 +6,11 @@ struct HistoryView: View {
     @Environment(AppModel.self) private var app
     @State private var workouts = Live<[WorkoutSummary]>([])
     @State private var month = MonthCalendar.monthStart(.now)
-    @State private var searching = false
     @State private var query = ""
-    @FocusState private var searchFocused: Bool
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ScreenHeader(eyebrow: eyebrow, title: "History") {
-                    Button {
-                        withAnimation(.snappy) { searching.toggle() }
-                        if searching { searchFocused = true } else { query = "" }
-                    } label: {
-                        Image(systemName: searching ? "xmark" : "magnifyingglass")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: 44, height: 44)
-                            .background(Color.s2, in: .circle)
-                            .overlay(Circle().strokeBorder(Color.line2))
-                    }
-                    .buttonStyle(.row)
-                    .accessibilityLabel(searching ? "Stop searching" : "Search workouts")
-                }
-                if searching { searchField.padding(.bottom, 14) }
 
                 if workouts.value.isEmpty {
                     Text("Finished workouts show up here, with a calendar of the days you trained.")
@@ -52,27 +35,16 @@ struct HistoryView: View {
         .scrollDismissesKeyboard(.interactively)
         .refreshable { await app.sync.sync() }
         .miloScreen()
-        .toolbarVisibility(.hidden, for: .navigationBar)
+        .tabTitle("History", subtitle: eyebrow)
+        // The system search: a glass search button that opens into a field, finding a workout
+        // by its name or an exercise in it.
+        .searchable(text: $query, prompt: "Workout or exercise")
+        .searchToolbarBehavior(.minimize)
         .onAppear {
             app.miloContext = .history
             let db = app.db
             workouts.watch(db) { try db.finishedWorkouts($0) }
         }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass").foregroundStyle(Color.tx3)
-            TextField("Workout or exercise", text: $query)
-                .font(.body16)
-                .focused($searchFocused)
-                .submitLabel(.search)
-                .autocorrectionDisabled()
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 48)
-        .background(Color.s1, in: .capsule)
-        .overlay(Capsule().strokeBorder(Color.line2))
     }
 
     /// "67 workouts since Sep 2024".
