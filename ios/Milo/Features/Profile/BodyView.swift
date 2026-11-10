@@ -60,7 +60,7 @@ struct BodyView: View {
     private var weightCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Space.rowText) {
                     Text("Weight").font(.cap).foregroundStyle(Color.tx3)
                     if let latest = weights.first, let kg = latest.weightKg {
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -157,7 +157,7 @@ struct BodyView: View {
             ForEach(Array(data.value.readings.prefix(60).enumerated()), id: \.element.id) { i, m in
                 if i > 0 { Divider().overlay(Color.line).padding(.leading, 16) }
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Space.rowText) {
                         Text(readingText(m)).font(.sofia(16, .semibold))
                         Text(m.measuredAt.formatted(.dateTime.day().month(.abbreviated).year()) + (m.source == "health" ? ", from Health" : ""))
                             .font(.sofia(14)).foregroundStyle(Color.tx2)

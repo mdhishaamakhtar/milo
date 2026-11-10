@@ -15,6 +15,7 @@ struct TodayView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                TitleLine(text: Format.longDay(.now))
                 if let running = data.value.running {
                     LiveWorkoutCard(detail: running) { app.showingWorkout = true }
                         .workoutSource()
@@ -80,7 +81,7 @@ struct TodayView: View {
         }
         .refreshable { await app.sync.sync() }
         .miloScreen()
-        .tabTitle("Today", subtitle: Format.longDay(.now))
+        .tabTitle("Today")
         .sheet(item: $editingTemplate) { TemplateEditor(template: $0) }
         .onAppear {
             app.miloContext = .today

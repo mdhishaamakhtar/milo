@@ -136,10 +136,25 @@ struct TabToolbar: ToolbarContent {
 
 extension View {
     /// A top-level tab's standard navigation bar: Milo's name and Profile, then a large title
-    /// that shrinks as you scroll, with a line under it.
-    func tabTitle(_ title: String, subtitle: String) -> some View {
+    /// that shrinks as you scroll. The line under the title is the screen's own first row (TitleLine).
+    func tabTitle(_ title: String) -> some View {
         navigationTitle(title)
-            .navigationSubtitle(subtitle)
             .toolbar { TabToolbar() }
+    }
+}
+
+/// The line under a tab's large title: the date, a count. The system's own subtitle sits so
+/// close under the title that a "y" touches it, so this is the first row of the screen's
+/// content instead, with room above and below, and scrolls away with the title.
+struct TitleLine: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.sofia(16, .regular, relativeTo: .subheadline))
+            .foregroundStyle(Color.tx2)
+            .padding(.horizontal, 4)
+            .padding(.top, Space.underTitleText)
+            .padding(.bottom, Space.underTitle)
     }
 }

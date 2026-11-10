@@ -11,8 +11,8 @@ struct AddField: View {
     var body: some View {
         @Bindable var model = model
         HStack(spacing: 11) {
-            HStack(alignment: .firstTextBaseline, spacing: 11) {
-                BarMLogo(size: 18)
+            HStack(alignment: .top, spacing: 11) {
+                BarMLogo(size: 18).onFirstLine(of: .sofia(16.5, .regular))
                 TextField(placeholder, text: $model.query, axis: .vertical)
                     .font(.sofia(16.5, .regular))
                     .lineLimit(1...4)
@@ -61,7 +61,7 @@ struct MatchList: View {
                         if i > 0 { Divider().overlay(Color.line).padding(.leading, 16) }
                         Button { model.add(match.exercise) } label: {
                             HStack {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: Space.rowText) {
                                     Text(highlighted(match.exercise.name)).font(.sofia(16, .regular)).lineLimit(1)
                                     Text(match.lastDate.map { "Last \(Format.shortDay($0))" + (match.lastText.map { ": \($0)" } ?? "") } ?? match.exercise.equipmentLabel)
                                         .font(.sofia(14, .regular)).foregroundStyle(Color.tx2).lineLimit(1)
@@ -81,7 +81,7 @@ struct MatchList: View {
             Button { ask(model.query); model.query = "" } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     BarMLogo(size: 18)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Space.rowText) {
                         Text(matches.value.isEmpty ? "Not in your exercises" : "Not one of these?").font(.sofia(16, .semibold))
                         Text("Keep typing what it looks like. Milo will work it out.").font(.sofia(14, .regular)).foregroundStyle(Color.tx2)
                     }

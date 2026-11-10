@@ -35,7 +35,7 @@ struct ExerciseDetailView: View {
         let loaded = e.measurement == .repsLoad || e.measurement == .assisted
         return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Space.headingText) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(e.shortName).font(.title).tracking(-0.4)
                         if !e.builtin { Badge(text: "Yours", color: .tx2) }
@@ -110,7 +110,7 @@ struct ExerciseDetailView: View {
         let scrubbed = scrubbing.flatMap { at in pts.min { abs($0.date.timeIntervalSince(at)) < abs($1.date.timeIntervalSince(at)) } }
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Space.rowText) {
                     Text(caption(p, loaded: loaded)).font(.cap).foregroundStyle(Color.tx3)
                     if let shown = scrubbed ?? best {
                         headline(shown, p, loaded: loaded).contentTransition(.numericText()).animation(.quick, value: shown.id)
@@ -236,7 +236,7 @@ struct ExerciseDetailView: View {
     }
 
     private func total(_ value: String, _ unit: String?, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: Space.rowText) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value).font(.sofia(23, .bold))
                 if let unit { Text(unit).font(.sofia(14, .semibold)).foregroundStyle(Color.tx2) }
@@ -257,7 +257,7 @@ struct ExerciseDetailView: View {
                             Text(s.workout.startedAt.formatted(.dateTime.day())).font(.sofia(19, .bold))
                         }
                         .frame(width: 44)
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Space.rowText) {
                             Text(s.topSet.map { Format.set($0, p.exercise.measurement, unit: p.unit) } ?? "").font(.h3)
                             Text(sessionDetail(s, p)).font(.sub).foregroundStyle(Color.tx2)
                         }

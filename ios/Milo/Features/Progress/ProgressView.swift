@@ -9,6 +9,7 @@ struct ProgressTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                TitleLine(text: "Last 12 weeks")
                 WeeksCard(weeks: data.value.weeks)
 
                 SectionHeader("New bests")
@@ -20,7 +21,7 @@ struct ProgressTab: View {
                             HStack(spacing: 12) {
                                 Image(systemName: "arrow.up").font(.system(size: 13, weight: .bold)).foregroundStyle(Color.bl)
                                     .frame(width: 32, height: 32).background(Color.bl.opacity(0.14), in: .rect(cornerRadius: 9))
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: Space.rowText) {
                                     Text(best.exercise.name).font(.sofia(16, .semibold)).lineLimit(1)
                                     Text("\(best.text), heaviest yet").font(.sofia(14)).foregroundStyle(Color.tx2)
                                 }
@@ -42,7 +43,7 @@ struct ProgressTab: View {
                     rows(data.value.top) { t in
                         NavigationLink(value: ExerciseRoute(id: t.exercise.id)) {
                             HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: Space.rowText) {
                                     Text(t.exercise.name).font(.sofia(16, .semibold)).lineLimit(1)
                                     Text(trendText(t)).font(.sofia(14)).foregroundStyle(Color.tx2)
                                 }
@@ -64,7 +65,7 @@ struct ProgressTab: View {
         }
         .refreshable { await app.sync.sync() }
         .miloScreen()
-        .tabTitle("Progress", subtitle: "Last 12 weeks")
+        .tabTitle("Progress")
         .onAppear {
             app.miloContext = .progress
             let db = app.db
@@ -148,7 +149,7 @@ private struct WeeksCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Space.rowText) {
                     Text("Workouts a week").font(.cap).foregroundStyle(Color.tx3)
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text("\(shown?.week.count ?? 0)").font(.sofia(30, .bold))
@@ -205,13 +206,14 @@ private struct WeeksCard: View {
 }
 
 /// A small top-set trend line.
-private struct Sparkline: View {
+struct Sparkline: View {
     let points: [Double]
+    var color = Color.tx2
 
     var body: some View {
         Chart(Array(points.enumerated()), id: \.offset) { i, v in
             LineMark(x: .value("Session", i), y: .value("Top", v))
-                .foregroundStyle(Color.tx2)
+                .foregroundStyle(color)
                 .lineStyle(StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
         }
         .chartXAxis(.hidden)

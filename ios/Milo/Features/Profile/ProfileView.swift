@@ -141,7 +141,7 @@ struct ProfileView: View {
                 .frame(width: 66, height: 66)
                 .background(Color.s2, in: .circle)
                 .overlay(Circle().strokeBorder(Color.line2))
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Space.headingText - 2) {
                 Text(name.prefix(1).uppercased() + name.dropFirst()).font(.sofia(24, .bold))
                 Text("@\(name), \(data.value.workouts) \(data.value.workouts == 1 ? "workout" : "workouts")")
                     .font(.sub).foregroundStyle(Color.tx2)

@@ -150,7 +150,7 @@ struct TemplateEditor: View {
         let grouped = labels[i].last?.isLetter == true
         return HStack(spacing: 10) {
             Text(labels[i]).font(.sofia(14, .semibold)).foregroundStyle(Color.tx3).frame(width: 22, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Space.rowText) {
                 Text(info?.exercise.name ?? "Exercise").font(.sofia(16, .semibold)).lineLimit(1)
                 Text(detail(i, info)).font(.sofia(14)).foregroundStyle(Color.tx2).lineLimit(1)
             }
@@ -197,7 +197,7 @@ struct TemplateEditor: View {
             ForEach(matches.value) { m in
                 Button { add(m.exercise.id) } label: {
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Space.rowText) {
                             Text(m.exercise.name).font(.sofia(16, .semibold))
                             Text(m.lastDate.map { "Last \(Format.shortDay($0))" } ?? m.exercise.equipmentLabel)
                                 .font(.sofia(14)).foregroundStyle(Color.tx2)

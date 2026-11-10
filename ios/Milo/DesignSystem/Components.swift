@@ -94,6 +94,18 @@ struct BarMLogo: View {
     }
 }
 
+extension BarMLogo {
+    /// The mark standing on the first line of a text field set in `font`. A text field
+    /// reports its top edge as its baseline, so the mark takes the baseline from an empty
+    /// line of the same type instead; put this and the field in a row aligned at the top.
+    func onFirstLine(of font: Font) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            self
+            Text(verbatim: "\u{200B}").font(font)
+        }
+    }
+}
+
 /// kg | lb switch.
 struct UnitSwitch: View {
     @Binding var unit: WeightUnit

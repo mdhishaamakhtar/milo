@@ -49,7 +49,7 @@ struct WorkoutDetailView: View {
     private func content(_ d: WorkoutDetail) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Space.headingText) {
                     Text(d.workout.name).font(.title).tracking(-0.4)
                     Text(timeRange(d.workout)).font(.sub).foregroundStyle(Color.tx2)
                 }
@@ -189,7 +189,7 @@ struct WorkoutStats: View {
     }
 
     private func stat(_ value: String, _ unit: String?, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: Space.rowText) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value).font(.sofia(23, .bold))
                 if let unit { Text(unit).font(.sofia(14, .semibold)).foregroundStyle(Color.tx2) }
@@ -214,7 +214,7 @@ private struct ExerciseSetsCard: View {
         VStack(alignment: .leading, spacing: 0) {
             NavigationLink(value: ExerciseRoute(id: entry.exercise.id)) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Space.rowText) {
                         Text(entry.exercise.name).font(.h3)
                         Text(subtitle).font(.sub).foregroundStyle(Color.tx2)
                     }

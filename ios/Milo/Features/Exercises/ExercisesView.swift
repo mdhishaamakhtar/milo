@@ -119,7 +119,7 @@ struct ExercisesView: View {
     @ViewBuilder private func rowView(_ row: ExerciseRow) -> some View {
         let link = NavigationLink(value: ExerciseRoute(id: row.id)) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Space.rowText) {
                     HStack(spacing: 6) {
                         Text(row.exercise.name).font(.sofia(16, .semibold)).lineLimit(1)
                         if !row.exercise.builtin { Badge(text: "Yours", color: .or) }

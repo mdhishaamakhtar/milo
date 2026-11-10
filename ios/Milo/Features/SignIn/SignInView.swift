@@ -301,7 +301,7 @@ private struct MiloDemo: View {
                     .foregroundStyle(Color.or)
                     .frame(width: 30, height: 30)
                     .background(Color.or.opacity(0.18), in: .circle)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Space.rowText) {
                     Text(title).font(.sofia(16, .semibold))
                     Text(detail).font(.sofia(13.5, .regular)).foregroundStyle(Color.tx2)
                 }

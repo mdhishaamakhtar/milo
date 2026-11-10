@@ -157,7 +157,7 @@ struct ExportView: View {
             HStack(spacing: 14) {
                 Image(systemName: "doc").font(.system(size: 15)).foregroundStyle(Color.tx2)
                     .frame(width: 32, height: 32).background(Color.s2, in: .rect(cornerRadius: 9))
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Space.rowText) {
                     Text(title).font(.sofia(16, .semibold))
                     Text("\(url.lastPathComponent), \(detail)").font(.sofia(13.5)).foregroundStyle(Color.tx2).lineLimit(1)
                 }

@@ -17,7 +17,7 @@ struct FinishView: View {
         if let detail = model.detail.value {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Space.headingText) {
                         HStack(spacing: 8) {
                             TextField("Workout name", text: $name).font(.title).focused($naming).fixedSize()
                             Image(systemName: "pencil").foregroundStyle(Color.tx3).onTapGesture { naming = true }
@@ -97,7 +97,7 @@ struct FinishView: View {
             ForEach(Array(d.entries.filter { !$0.doneSets.isEmpty }.enumerated()), id: \.element.id) { i, e in
                 if i > 0 { Divider().overlay(Color.line).padding(.leading, 16) }
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Space.rowText) {
                         Text(e.exercise.name).font(.sofia(16, .semibold)).lineLimit(1)
                         Text(Format.summary(e)).font(.sofia(14, .regular)).foregroundStyle(Color.tx2)
                     }
@@ -120,7 +120,7 @@ struct FinishView: View {
             HStack(spacing: 14) {
                 Image(systemName: icon).font(.system(size: 14)).foregroundStyle(icon == "heart" ? Color.or : Color.tx2)
                     .frame(width: 32, height: 32).background(Color.s2, in: .rect(cornerRadius: 10))
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Space.rowText) {
                     Text(title).font(.sofia(16, .semibold))
                     if let detail { Text(detail).font(.sofia(14, .regular)).foregroundStyle(Color.tx2) }
                 }

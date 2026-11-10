@@ -11,7 +11,7 @@ struct HistoryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-
+                TitleLine(text: eyebrow)
                 if workouts.value.isEmpty {
                     Text("Finished workouts show up here, with a calendar of the days you trained.")
                         .font(.sub).foregroundStyle(Color.tx2)
@@ -35,7 +35,7 @@ struct HistoryView: View {
         .scrollDismissesKeyboard(.interactively)
         .refreshable { await app.sync.sync() }
         .miloScreen()
-        .tabTitle("History", subtitle: eyebrow)
+        .tabTitle("History")
         // The system search: a glass search button that opens into a field, finding a workout
         // by its name or an exercise in it.
         .searchable(text: $query, prompt: "Workout or exercise")

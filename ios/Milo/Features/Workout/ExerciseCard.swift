@@ -25,7 +25,7 @@ struct ExerciseCard: View {
                         .frame(width: 36, height: 30)
                 }
             }
-            Text(subtitle).font(.sub).foregroundStyle(Color.tx2).padding(.top, 2)
+            Text(subtitle).font(.sub).foregroundStyle(Color.tx2).padding(.top, Space.headingText - 2)
 
             grid.padding(.top, 18)
 

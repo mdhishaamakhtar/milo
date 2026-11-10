@@ -33,6 +33,18 @@ enum Radius {
     static let well: CGFloat = 13
 }
 
+/// The gaps that keep a screen from feeling crowded, named once so every screen breathes alike.
+enum Space {
+    /// Between a large title and the line under it.
+    static let underTitleText: CGFloat = 2
+    /// Between a screen's own heading and the line under it.
+    static let headingText: CGFloat = 8
+    /// Between a row's name and the smaller line under it.
+    static let rowText: CGFloat = 4
+    /// Between that line and the screen's first card.
+    static let underTitle: CGFloat = 20
+}
+
 
 extension UIFont {
     /// Sofia Sans for the UIKit pieces SwiftUI can't style, like navigation bar titles.

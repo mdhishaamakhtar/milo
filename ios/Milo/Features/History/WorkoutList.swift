@@ -31,7 +31,7 @@ struct WorkoutList: View {
                 Text(w.workout.startedAt.formatted(.dateTime.day())).font(.sofia(19, .bold))
             }
             .frame(width: 44)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Space.rowText) {
                 Text(w.workout.name).font(.h3).lineLimit(1)
                 Text(detail(w)).font(.sub).foregroundStyle(Color.tx2)
             }

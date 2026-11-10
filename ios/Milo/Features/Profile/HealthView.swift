@@ -64,7 +64,7 @@ struct HealthView: View {
         HStack(spacing: 14) {
             Image(systemName: "heart").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.or)
                 .frame(width: 44, height: 44).background(Color.or.opacity(0.14), in: .rect(cornerRadius: 12))
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Space.rowText) {
                 Text(title).font(.sofia(17, .semibold))
                 Text(subtitle).font(.sofia(14)).foregroundStyle(Color.tx2)
             }
@@ -104,7 +104,7 @@ struct HealthView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
                 if i > 0 { Divider().overlay(Color.line).padding(.leading, 16) }
                 Toggle(isOn: row.2) {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Space.rowText) {
                         Text(row.0).font(.sofia(16, .semibold))
                         Text(row.1).font(.sofia(14)).foregroundStyle(Color.tx2)
                     }
