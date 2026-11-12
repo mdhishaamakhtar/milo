@@ -8,10 +8,12 @@ Read the README's Quick Start first; this picks up once the app is running.
 make test       # server tests, against a real Postgres in Docker
 make ios-test   # app tests on a simulator
 make lint       # buf lint and go vet
+make cover      # branch coverage of the server, region coverage of the app's logic
 ```
 
 Run the tests for the side you touched before you commit. A change to
-`proto/` or `testdata/maths` touches both sides.
+`proto/` or `testdata/maths` touches both sides. Both suites take seconds and
+run their tests in parallel.
 
 Generated code is checked in (`backend/gen`, `ios/MiloAPI/Generated`, and the
 `*.sql.go` files). After editing a `.proto` or a `.sql` file, run `make gen` and
@@ -28,7 +30,7 @@ These are the things a reviewer will ask for.
   something the code can't: the reason, the rule, the trap. Don't narrate.
 - **Tests use the real thing.** Server tests run against Postgres through the
   real HTTP handlers (`internal/testkit`). The one fake is the language model.
-  App tests use a real in-memory SQLite database.
+  App tests use a real in-memory SQLite database. See "Testing" below.
 - **The phone never waits on the network to log.** Reads and writes go to the
   local database; sync catches up.
 - **Milo never writes to the log.** A tool that changes something returns a card
@@ -45,6 +47,51 @@ These are the things a reviewer will ask for.
 
 Commits follow `type(scope): what changed`, with a body that says why when the
 why isn't obvious.
+
+## Testing
+
+A test earns its place by catching something a person would notice breaking.
+Don't test a library (Foundation's date formats, JSON, godotenv), a constant, or
+a line that only calls something else. Don't bend code to reach it from a test:
+if a test needs a seam, plain code usually has one already (a parameter, a
+function moved out of a view body).
+
+### Which test an app change needs
+
+| You changed | Test it with |
+|---|---|
+| A number (volume, 1RM, calories, bests) | A case in `testdata/maths`; both apps run it |
+| How something reads ("60 kg × 8", "Tue 6 Oct") | `FormatTests` |
+| What the store reads or writes | `StoreReadTests` / `StoreWriteTests`, on an in-memory database |
+| A synced row or field | `ProtoTests` round trip, and a sync test on the server |
+| Sync | `SyncEngineTests`, against `FakeServer` |
+| Talking to Milo, or how a card applies | `MiloSessionTests`, against `FakeServer` |
+| How Milo's words or cards are laid out | `ChatLogicTests` (`ReplyText.blocks`, `Conversation.rows`, `CardView.layout`) |
+| The workout screen's logic (ticking, rest, the pad) | `WorkoutModelTests` |
+| A view's look | No unit test: look at it on a simulator (empty, a long name, the largest text size) |
+
+Keep logic out of view bodies so it can be tested as a plain function: that is
+why `Conversation.rows` and `CardView.layout` are `static func`s.
+
+`FakeServer` is Connect's own transport interface answering from queues, so a
+test runs the generated clients, codec and envelopes and sees exactly what the
+app sends. A `Gate` holds a reply part-way, to look at the app mid-stream
+without sleeping. Apps built in tests pass `onDevice: false`: no network
+monitor and no notifications, which a test host can't answer.
+
+### Server tests
+
+Every test gets its own database, copied from a migrated template, so tests run
+with `t.Parallel()`. One Postgres container serves a whole `go test ./...`.
+Drive Milo's tools with `call` and the fake model: never the real model outside
+`make live` and `make battery`. A tool's refusals belong in
+`TestToolsTellMiloWhatWasWrong`, one line per mistake a model makes.
+
+### Coverage
+
+`make cover` prints branch coverage per server package and region coverage of
+the app's logic. A branch that only a failing database can take (an
+`if err != nil` straight after a query) is left untested rather than faked.
 
 ## Recipes
 
