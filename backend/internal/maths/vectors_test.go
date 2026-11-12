@@ -10,14 +10,19 @@ import (
 	"github.com/mdhishaamakhtar/milo/backend/internal/maths"
 )
 
-// load reads testdata/maths/<file> from the repo root.
+// load reads testdata/maths/<file> from the repo root, or from MILO_TESTDATA when
+// set: `make cover` runs the tests from a copy of the module, outside the repo.
 func load[In, Want any](t *testing.T, file string) []struct {
 	Name     string `json:"name"`
 	Input    In     `json:"input"`
 	Expected Want   `json:"expected"`
 } {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "maths", file))
+	dir := os.Getenv("MILO_TESTDATA")
+	if dir == "" {
+		dir = filepath.Join("..", "..", "..", "testdata")
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "maths", file))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,6 +56,7 @@ func opt(t *testing.T, name string, got float64, ok bool, want *float64) {
 }
 
 func TestUnitsVectors(t *testing.T) {
+	t.Parallel()
 	type want struct {
 		Kg   float64 `json:"kg"`
 		Text string  `json:"text"`
@@ -78,6 +84,7 @@ func TestUnitsVectors(t *testing.T) {
 }
 
 func TestVolumeVectors(t *testing.T) {
+	t.Parallel()
 	for _, c := range load[struct {
 		Sets []maths.SetInput `json:"sets"`
 	}, struct {
@@ -90,6 +97,7 @@ func TestVolumeVectors(t *testing.T) {
 }
 
 func TestE1RMVectors(t *testing.T) {
+	t.Parallel()
 	for _, c := range load[struct {
 		LoadKg float64 `json:"load_kg"`
 		Reps   int     `json:"reps"`
@@ -102,6 +110,7 @@ func TestE1RMVectors(t *testing.T) {
 }
 
 func TestEffectiveLoadVectors(t *testing.T) {
+	t.Parallel()
 	for _, c := range load[struct {
 		Measurement string  `json:"measurement"`
 		Weight      string  `json:"weight"`
@@ -116,6 +125,7 @@ func TestEffectiveLoadVectors(t *testing.T) {
 }
 
 func TestCaloriesVectors(t *testing.T) {
+	t.Parallel()
 	for _, c := range load[struct {
 		DurationS float64               `json:"duration_s"`
 		BodyKg    float64               `json:"body_kg"`
@@ -129,6 +139,7 @@ func TestCaloriesVectors(t *testing.T) {
 }
 
 func TestProgressVectors(t *testing.T) {
+	t.Parallel()
 	for _, c := range load[struct {
 		Sets   []maths.SetInput `json:"sets"`
 		BodyKg float64          `json:"body_kg"`
@@ -151,6 +162,7 @@ func TestProgressVectors(t *testing.T) {
 }
 
 func TestBestsVectors(t *testing.T) {
+	t.Parallel()
 	for _, c := range load[struct {
 		Sessions []maths.Session `json:"sessions"`
 		BodyKg   float64         `json:"body_kg"`
@@ -170,5 +182,17 @@ func TestBestsVectors(t *testing.T) {
 				t.Errorf("%s best %d reps: got %v, want %v", c.Name, i, g.Reps, w.Reps)
 			}
 		}
+	}
+}
+
+// The agent counts sets with WorkingSets; the app has no twin of it, so it isn't in the shared vectors.
+func TestWorkingSetsCountsOnlySetsThatCount(t *testing.T) {
+	t.Parallel()
+	sets := []maths.SetInput{
+		{Done: true, Kind: "normal"}, {Done: true, Kind: maths.Warmup}, {Done: false, Kind: "normal"},
+		{Done: true, Kind: "drop"}, {Done: true, Kind: "failure"},
+	}
+	if got := maths.WorkingSets(sets); got != 3 {
+		t.Fatalf("got %d working sets, want 3", got)
 	}
 }

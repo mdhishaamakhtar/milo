@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"sync"
 	"time"
@@ -289,7 +290,7 @@ func (t *turn) saveItem(ctx context.Context, kind string, payload []byte, cardID
 func (t *turn) saveText(ctx context.Context, kind, text string) {
 	b, _ := json.Marshal(textPayload{Text: text})
 	if err := t.saveItem(ctx, kind, b, nil, nil); err != nil {
-		t.s.log.Error("agent: save text", "err", err, "conversation", t.convID)
+		slog.Error("agent: save text", "err", err, "conversation", t.convID)
 	}
 }
 
@@ -297,7 +298,7 @@ func (t *turn) saveText(ctx context.Context, kind, text string) {
 func (t *turn) reading(ctx context.Context, summary string) {
 	b, _ := json.Marshal(readingPayload{Summary: summary})
 	if err := t.saveItem(ctx, "reading", b, nil, nil); err != nil {
-		t.s.log.Error("agent: save reading", "err", err, "conversation", t.convID)
+		slog.Error("agent: save reading", "err", err, "conversation", t.convID)
 	}
 	_ = t.emit(&milo.SendResponse{Event: &milo.SendResponse_Reading{Reading: &milo.Reading{Summary: summary}}})
 }
@@ -356,7 +357,7 @@ func (s *Service) addUsage(ctx context.Context, userID uuid.UUID, u anthropic.Us
 		CacheReadTokens: u.CacheReadInputTokens, CacheWriteTokens: u.CacheCreationInputTokens,
 	})
 	if err != nil {
-		s.log.Error("agent: record usage", "err", err)
+		slog.Error("agent: record usage", "err", err)
 	}
 }
 

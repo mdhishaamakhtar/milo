@@ -40,13 +40,13 @@ func (s *Service) Sync(ctx context.Context, req *milo.SyncRequest) (*milo.SyncRe
 	userID := auth.UserID(ctx)
 	if len(req.GetChanges()) > 0 {
 		err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-			return Push(ctx, tx, userID, req.GetChanges())
+			return pushChanges(ctx, tx, userID, req.GetChanges())
 		})
 		if err != nil {
 			return nil, rpcError(err)
 		}
 	}
-	changes, cursor, more, err := Pull(ctx, query.New(s.pool), userID, req.GetCursor(), pageSize)
+	changes, cursor, more, err := pull(ctx, query.New(s.pool), userID, req.GetCursor(), pageSize)
 	if err != nil {
 		return nil, rpcError(err)
 	}

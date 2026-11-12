@@ -197,6 +197,7 @@ func openWorkout(t *testing.T, env *testkit.API, ctx context.Context) uuid.UUID 
 }
 
 func TestLogSetsCardAutoApplies(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -249,6 +250,7 @@ func TestLogSetsCardAutoApplies(t *testing.T) {
 }
 
 func TestProposeNewExerciseIsApproximate(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -305,6 +307,7 @@ func TestProposeNewExerciseIsApproximate(t *testing.T) {
 }
 
 func TestProposeChangeCarriesBaseVersions(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -315,7 +318,8 @@ func TestProposeChangeCarriesBaseVersions(t *testing.T) {
 		say(t, "The landmine press is down as six sets of 15 at 20 kg, all identical. What should it be?"),
 	)
 	ev := send(t, env, ctx, "", "What did I do for shoulders on 6 October? I think the landmine press is logged wrong.", &milo.MiloContext{Screen: "today", Timezone: "UTC"})
-	if len(ev.readings) != 1 || ev.readings[0] != "Read shoulders 6th oct, Tue 6 Oct" {
+	// The workout is dated 6 Oct 2026: from 2027 its day carries the year.
+	if len(ev.readings) != 1 || !strings.HasPrefix(ev.readings[0], "Read shoulders 6th oct, Tue 6 Oct") {
 		t.Fatalf("readings = %v", ev.readings)
 	}
 	if res := lastToolResult(t, model.calls[1]); !strings.Contains(res, setIDs[3].String()) || !strings.Contains(res, "20 kg × 15") {
@@ -338,7 +342,7 @@ func TestProposeChangeCarriesBaseVersions(t *testing.T) {
 		t.Fatalf("got %d cards, errors %v", len(ev2.cards), ev2.errs)
 	}
 	card := ev2.cards[0]
-	if card.GetKind() != milo.CardKind_CARD_KIND_CHANGE || card.GetSubtitle() != "shoulders 6th oct, Tue 6 Oct" {
+	if card.GetKind() != milo.CardKind_CARD_KIND_CHANGE || !strings.HasPrefix(card.GetSubtitle(), "shoulders 6th oct, Tue 6 Oct") {
 		t.Fatalf("card = %v", card)
 	}
 	if len(card.GetBase()) != 3 || len(card.GetChanges()) != 3 {
@@ -362,6 +366,7 @@ func TestProposeChangeCarriesBaseVersions(t *testing.T) {
 }
 
 func TestCardOutcomeReachesNextTurn(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -402,6 +407,7 @@ func TestCardOutcomeReachesNextTurn(t *testing.T) {
 }
 
 func TestAgentRejectsOverBudget(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{DailyTokenCap: 1000}, model)
 	ctx, userID := env.SignUp(t, "hishaam")
@@ -418,6 +424,7 @@ func TestAgentRejectsOverBudget(t *testing.T) {
 }
 
 func TestLoopStreamErrorKeepsHistoryConsistent(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -447,6 +454,7 @@ func TestLoopStreamErrorKeepsHistoryConsistent(t *testing.T) {
 }
 
 func TestHistoryIsAppendOnly(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -489,6 +497,7 @@ func TestHistoryIsAppendOnly(t *testing.T) {
 }
 
 func TestReadToolsScopeToUser(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	alice, _ := env.SignUp(t, "alice")
@@ -513,6 +522,7 @@ func TestReadToolsScopeToUser(t *testing.T) {
 }
 
 func TestGetConversationReplaysItems(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -546,6 +556,7 @@ func TestGetConversationReplaysItems(t *testing.T) {
 }
 
 func TestOneTurnAddingSeveralExercises(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -590,6 +601,7 @@ func TestOneTurnAddingSeveralExercises(t *testing.T) {
 }
 
 func TestConversationsAreSummarisedAndDeleted(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	alice, _ := env.SignUp(t, "alice")

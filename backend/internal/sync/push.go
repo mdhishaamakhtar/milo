@@ -17,11 +17,11 @@ import (
 	"github.com/mdhishaamakhtar/milo/backend/internal/rows"
 )
 
-// Push writes a user's changes inside tx. Call it in its own transaction: it
+// pushChanges writes a user's changes inside tx. Call it in its own transaction: it
 // takes the locks that keep this user's server_seq values committing in order,
 // so a pull can never skip a row. A write older than the stored row is skipped;
 // a row that belongs to someone else (or a built-in exercise) fails the push.
-func Push(ctx context.Context, tx pgx.Tx, userID uuid.UUID, changes []*milo.Change) error {
+func pushChanges(ctx context.Context, tx pgx.Tx, userID uuid.UUID, changes []*milo.Change) error {
 	q := query.New(tx)
 	if err := q.LockAgainstBuiltinInserts(ctx); err != nil {
 		return err

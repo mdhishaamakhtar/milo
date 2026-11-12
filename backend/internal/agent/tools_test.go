@@ -3,6 +3,7 @@ package agent_test
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -160,6 +161,7 @@ func running(t *testing.T, env *testkit.API, ctx context.Context) (workoutID, be
 }
 
 func TestStartWorkoutFillsInLastTimeAndLoggingTicksIt(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -202,6 +204,7 @@ func TestStartWorkoutFillsInLastTimeAndLoggingTicksIt(t *testing.T) {
 }
 
 func TestOnlyOneWorkoutRuns(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -218,6 +221,7 @@ func TestOnlyOneWorkoutRuns(t *testing.T) {
 }
 
 func TestLoggingWithNoIDUsesTheRunningWorkout(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -243,6 +247,7 @@ func TestLoggingWithNoIDUsesTheRunningWorkout(t *testing.T) {
 }
 
 func TestFinishDropsWhatWasNeverTicked(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -275,6 +280,7 @@ func TestFinishDropsWhatWasNeverTicked(t *testing.T) {
 }
 
 func TestProposeChangeEditsExercisesAndTimes(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -342,6 +348,7 @@ func TestProposeChangeEditsExercisesAndTimes(t *testing.T) {
 }
 
 func TestProposeDeleteWorkout(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -353,7 +360,8 @@ func TestProposeDeleteWorkout(t *testing.T) {
 		t.Fatalf("card = %v", card)
 	}
 	wantRows(t, card, map[string]int{"workout deleted": 1, "workout_exercise deleted": 1, "set deleted": 6})
-	if card.GetSubtitle() != "Tue 6 Oct, 1 exercise, 6 sets" {
+	// The workout is dated 6 Oct 2026: from 2027 its day carries the year.
+	if sub := card.GetSubtitle(); !strings.HasPrefix(sub, "Tue 6 Oct") || !strings.HasSuffix(sub, ", 1 exercise, 6 sets") {
 		t.Fatalf("subtitle = %q", card.GetSubtitle())
 	}
 
@@ -365,6 +373,7 @@ func TestProposeDeleteWorkout(t *testing.T) {
 }
 
 func TestTemplatesAreProposedChangedAndCarryNewExercises(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -424,6 +433,7 @@ func TestTemplatesAreProposedChangedAndCarryNewExercises(t *testing.T) {
 }
 
 func TestMergeExerciseMovesItsHistory(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -437,22 +447,54 @@ func TestMergeExerciseMovesItsHistory(t *testing.T) {
 	}})
 	apply(t, env, ctx, cards[0])
 	mine := cards[0].GetExerciseId()
+	if _, err := env.Sync.Sync(ctx, &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_Template{Template: &milo.Template{
+		Id: uuid.NewString(), Name: "Push", Items: []*milo.TemplateItem{{ExerciseId: bench.String()}, {ExerciseId: mine}}, UpdatedAt: timestamppb.Now(),
+	}}}}}); err != nil {
+		t.Fatal(err)
+	}
 
 	_, cards = call(t, env, ctx, model, nil, toolUse{"propose_exercise_change", map[string]any{"exercise_id": mine, "merge_into": bench.String()}})
 	card := cards[0]
-	wantRows(t, card, map[string]int{"workout_exercise": 1, "exercise deleted": 1})
+	wantRows(t, card, map[string]int{"workout_exercise": 1, "template": 1, "exercise deleted": 1})
 	if card.GetChanges()[0].GetWorkoutExercise().GetExerciseId() != bench.String() || card.GetApplyLabel() != "Merge" {
 		t.Fatalf("card = %v", card)
 	}
+	if got := linesOf(card); got != "Workouts||1 session moves to bench press\nTemplates||1 template updated\nFlat Barbell Press|Yours|Removed" {
+		t.Fatalf("lines:\n%s", got)
+	}
+}
 
-	// Built-in exercises can't be edited.
-	results, _ := call(t, env, ctx, model, nil, toolUse{"propose_exercise_change", map[string]any{"exercise_id": bench.String(), "name": "Bench"}})
-	if !strings.HasPrefix(results[0], "ERROR") {
-		t.Fatalf("offered to rename a built-in exercise: %s", results[0])
+// Changing an exercise of your own shows each change as before and after.
+func TestChangingYourOwnExerciseShowsEachChange(t *testing.T) {
+	t.Parallel()
+	model := &fakeModel{}
+	env := testkit.NewAPI(t, config.Config{}, model)
+	ctx, _ := env.SignUp(t, "hishaam")
+	id := uuid.New()
+	if _, err := env.Sync.Sync(ctx, &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_Exercise{Exercise: &milo.Exercise{
+		Id: id.String(), Name: "Landmine Rotation", Measurement: milo.Measurement_MEASUREMENT_REPS_LOAD, PrimaryMuscles: []string{"obliques"},
+		Approximate: true, UpdatedAt: timestamppb.Now(),
+	}}}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, cards := call(t, env, ctx, model, nil, toolUse{"propose_exercise_change", map[string]any{
+		"exercise_id": id.String(), "name": "Landmine Twist", "measurement": "timed", "unilateral": true, "equipment": "barbell",
+		"primary_muscles": []string{"obliques", "abs"}, "met": 4.5, "confirm": true,
+	}})
+	card := cards[0]
+	want := "Name|Landmine Rotation|Landmine Twist\nCounted|Reps at a weight|Time\nOne side at a time|No|Yes\nEquipment|None|barbell\nWorks|obliques|obliques, abs\nStatus|Approximate|Confirmed"
+	if got := linesOf(card); got != want {
+		t.Fatalf("lines:\n%s\nwant:\n%s", got, want)
+	}
+	e := card.GetChanges()[0].GetExercise()
+	if card.GetKind() != milo.CardKind_CARD_KIND_CHANGE || card.GetAppliedTitle() != "Landmine Twist updated" || e.GetApproximate() || e.GetMet() != 4.5 || len(card.GetBase()) != 1 {
+		t.Fatalf("card %v", card)
 	}
 }
 
 func TestBodySettingsAndPreferencesApplyStraightAway(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -491,6 +533,7 @@ func TestBodySettingsAndPreferencesApplyStraightAway(t *testing.T) {
 }
 
 func TestTrainingSummaryCountsWorkingSets(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -510,5 +553,209 @@ func TestTrainingSummaryCountsWorkingSets(t *testing.T) {
 		if !strings.Contains(strings.ReplaceAll(results[0], `\"`, `"`), want) {
 			t.Fatalf("summary is missing %s:\n%s", want, results[0])
 		}
+	}
+}
+
+func TestAddingExercisesToTheRunningWorkout(t *testing.T) {
+	t.Parallel()
+	model := &fakeModel{}
+	env := testkit.NewAPI(t, config.Config{}, model)
+	ctx, _ := env.SignUp(t, "hishaam")
+	workoutID, _, _ := running(t, env, ctx)
+	dip, curl, hammer := builtin(t, env, "Chest Dip"), builtin(t, env, "Bicep Curl (Dumbbell)"), builtin(t, env, "Hammer Curl (Dumbbell)")
+
+	_, cards := call(t, env, ctx, model, nil,
+		toolUse{"add_exercises", map[string]any{"exercise_ids": []string{dip.String()}}},
+		toolUse{"add_exercises", map[string]any{"exercise_ids": []string{curl.String(), hammer.String()}, "superset": true}},
+	)
+	one, pair := cards[0], cards[1]
+	if one.GetTitle() != "Added Chest Dip" || one.GetSubtitle() != "To Push day" || one.GetWorkoutId() != workoutID.String() || !one.GetAutoApply() {
+		t.Fatalf("one exercise: %q / %q", one.GetTitle(), one.GetSubtitle())
+	}
+	if pair.GetTitle() != "Added 2 exercises as a superset" || pair.GetSubtitle() != "Bicep Curl (Dumbbell), Hammer Curl (Dumbbell)" {
+		t.Fatalf("superset: %q / %q", pair.GetTitle(), pair.GetSubtitle())
+	}
+	// After bench and squat, in order; the pair share a superset group, the dip has none.
+	var positions []int32
+	groups := map[string]string{}
+	for _, c := range append(one.GetChanges(), pair.GetChanges()...) {
+		if we := c.GetWorkoutExercise(); we != nil {
+			positions = append(positions, we.GetPosition())
+			groups[we.GetExerciseId()] = we.GetGroupLabel()
+		}
+	}
+	if !slices.Equal(positions, []int32{3, 4, 5}) || groups[dip.String()] != "" || groups[curl.String()] == "" || groups[curl.String()] != groups[hammer.String()] {
+		t.Fatalf("positions %v, groups %v", positions, groups)
+	}
+}
+
+func TestDoingAPastWorkoutAgainOrStartingFromATemplate(t *testing.T) {
+	t.Parallel()
+	model := &fakeModel{}
+	env := testkit.NewAPI(t, config.Config{}, model)
+	ctx, _ := env.SignUp(t, "hishaam")
+	press := builtin(t, env, "Single Arm Landmine Press (Barbell)")
+	templateID, gone := uuid.New(), uuid.New()
+	at := timestamppb.New(time.Now().Add(-48 * time.Hour))
+	if _, err := env.Sync.Sync(ctx, &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_Template{Template: &milo.Template{
+		Id: templateID.String(), Name: "Shoulders", UpdatedAt: at,
+		// An exercise the user has since deleted is skipped, not an error.
+		Items: []*milo.TemplateItem{{ExerciseId: press.String()}, {ExerciseId: gone.String()}},
+	}}}}}); err != nil {
+		t.Fatal(err)
+	}
+	past, _ := shoulders(t, env, ctx)
+	if _, err := env.Sync.Sync(ctx, &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_Workout{Workout: &milo.Workout{
+		Id: past.String(), Name: "shoulders 6th oct", TemplateId: templateID.String(),
+		StartedAt: timestamppb.New(time.Date(2026, 10, 6, 7, 0, 0, 0, time.UTC)), EndedAt: timestamppb.New(time.Date(2026, 10, 6, 8, 10, 0, 0, time.UTC)), UpdatedAt: at,
+	}}}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, cards := call(t, env, ctx, model, nil, toolUse{"start_workout", map[string]any{"copy_workout_id": past.String()}})
+	again := cards[0]
+	if again.GetTitle() != "Started shoulders 6th oct" || again.GetSubtitle() != "1 exercise, sets filled in from last time" {
+		t.Fatalf("again: %q / %q", again.GetTitle(), again.GetSubtitle())
+	}
+	if w := again.GetChanges()[0].GetWorkout(); w.GetTemplateId() != templateID.String() || w.GetEndedAt() != nil {
+		t.Fatalf("copied workout %v, want it running and keeping its template", w)
+	}
+
+	// That card wasn't applied, so nothing is running yet: start again from the template.
+	_, cards = call(t, env, ctx, model, nil, toolUse{"start_workout", map[string]any{"template_id": templateID.String()}})
+	if fresh := cards[0]; fresh.GetTitle() != "Started Shoulders" || fresh.GetSubtitle() != "1 exercise, sets filled in from last time" {
+		t.Fatalf("from a template: %q / %q", fresh.GetTitle(), fresh.GetSubtitle())
+	}
+}
+
+func TestFinishingAWorkout(t *testing.T) {
+	t.Parallel()
+	model := &fakeModel{}
+	env := testkit.NewAPI(t, config.Config{}, model)
+	ctx, _ := env.SignUp(t, "hishaam")
+
+	// A workout started in this message can't be finished in it, and one with nothing ticked isn't saved.
+	results, cards := call(t, env, ctx, model, nil, toolUse{"start_workout", map[string]any{}}, toolUse{"finish_workout", map[string]any{}})
+	if !strings.Contains(results[1], "only just started in this message") {
+		t.Fatalf("finish in the same message: %s", results[1])
+	}
+	apply(t, env, ctx, cards[0])
+	results, _ = call(t, env, ctx, model, nil, toolUse{"finish_workout", map[string]any{}})
+	if !strings.Contains(results[0], "no sets are ticked") || !strings.Contains(results[0], "propose_delete") {
+		t.Fatalf("finish with nothing ticked: %s", results[0])
+	}
+
+	// Stopped twenty minutes ago, and renamed on the way out.
+	octx, _ := env.SignUp(t, "someone")
+	running(t, env, octx)
+	ended := time.Now().UTC().Add(-10 * time.Minute)
+	_, cards = call(t, env, octx, model, nil, toolUse{"finish_workout", map[string]any{"ended_at": ended.Format("2006-01-02T15:04"), "name": "Chest"}})
+	card := cards[0]
+	w := card.GetChanges()[len(card.GetChanges())-1].GetWorkout()
+	// The length depends on the second it ran, so only the end and the sets are checked.
+	if card.GetTitle() != "Finished Chest" || !strings.HasSuffix(card.GetSubtitle(), " min, 1 set, 480 kg") || w.GetEndedAt().AsTime().Format("15:04") != ended.Format("15:04") {
+		t.Fatalf("%q / %q, ended %v", card.GetTitle(), card.GetSubtitle(), w.GetEndedAt().AsTime())
+	}
+}
+
+func TestSetsOfEveryKindAreLoggedAsSaid(t *testing.T) {
+	t.Parallel()
+	model := &fakeModel{}
+	env := testkit.NewAPI(t, config.Config{}, model)
+	ctx, _ := env.SignUp(t, "hishaam")
+	bench := builtin(t, env, "Bench Press (Barbell)")
+
+	_, cards := call(t, env, ctx, model, nil, toolUse{"log_sets", map[string]any{
+		"exercise_id": bench.String(),
+		"new_workout": map[string]any{"name": "Push", "started_at": "2026-11-01T10:00", "ended_at": "2026-11-01T10:45"},
+		"sets":        []map[string]any{{"reps": 8, "weight": "60"}, {"reps": 10, "weight": "50", "kind": "drop"}, {"reps": 12, "weight": "40", "kind": "failure"}},
+	}})
+	card := cards[0]
+	if got := linesOf(card); got != "Set 1||60 kg × 8\nSet 2||Drop set, 50 kg × 10\nSet 3||To failure, 40 kg × 12" {
+		t.Fatalf("lines:\n%s", got)
+	}
+	// A session that already happened says which, since it isn't on screen. (After 2026 the year follows.)
+	if !strings.HasPrefix(card.GetSubtitle(), "Bench Press (Barbell), Push Sun 1 Nov") {
+		t.Fatalf("subtitle %q", card.GetSubtitle())
+	}
+	if w := card.GetChanges()[0].GetWorkout(); w.GetEndedAt().AsTime() != time.Date(2026, 11, 1, 10, 45, 0, 0, time.UTC) {
+		t.Fatalf("workout %v", w)
+	}
+}
+
+func TestSettingsChangeAndUndoAsSaid(t *testing.T) {
+	t.Parallel()
+	model := &fakeModel{}
+	env := testkit.NewAPI(t, config.Config{}, model)
+	ctx, _ := env.SignUp(t, "hishaam")
+	curl := builtin(t, env, "Bicep Curl (Dumbbell)")
+
+	_, cards := call(t, env, ctx, model, nil,
+		toolUse{"log_body", map[string]any{"body_fat_pct": 18.5, "measured_at": "2026-11-01T07:30"}},
+		toolUse{"update_settings", map[string]any{"height_cm": 180}},
+		toolUse{"update_settings", map[string]any{"birth_date": "1995-04-02", "sex": "male"}},
+		toolUse{"set_exercise_preferences", map[string]any{"exercise_id": curl.String(), "rest_s": 120}},
+	)
+	fat, height, profile, rest := cards[0], cards[1], cards[2], cards[3]
+	if fat.GetTitle() != "Logged 18.5% body fat" || !strings.HasPrefix(fat.GetSubtitle(), "Body reading, Sun 1 Nov") {
+		t.Fatalf("reading: %q / %q", fat.GetTitle(), fat.GetSubtitle())
+	}
+	// One change is the title; several are listed under "Settings updated".
+	if height.GetTitle() != "Height 180 cm" || profile.GetTitle() != "Settings updated" || profile.GetSubtitle() != "Date of birth 1995-04-02, Sex male" {
+		t.Fatalf("settings: %q, %q / %q", height.GetTitle(), profile.GetTitle(), profile.GetSubtitle())
+	}
+	for _, c := range cards[1:] {
+		apply(t, env, ctx, c)
+	}
+
+	_, cards = call(t, env, ctx, model, nil,
+		toolUse{"update_settings", map[string]any{"birth_date": "", "sex": ""}},
+		toolUse{"set_exercise_preferences", map[string]any{"exercise_id": curl.String(), "rest_s": 0}},
+	)
+	if cards[0].GetSubtitle() != "Date of birth None, Sex None" {
+		t.Fatalf("clearing: %q", cards[0].GetSubtitle())
+	}
+	if pref := cards[1].GetChanges()[0].GetExercisePref(); pref.RestS != nil || cards[1].GetSubtitle() != "Rest back to the default" || rest.GetSubtitle() != "Rest 2 min" {
+		t.Fatalf("rest: %v, %q after %q", pref, cards[1].GetSubtitle(), rest.GetSubtitle())
+	}
+}
+
+// Fixing a set changes only the fields that were said, two edits to one set build on
+// each other, and an added set follows on from the last one.
+func TestFixingSetsChangesOnlyWhatWasSaid(t *testing.T) {
+	t.Parallel()
+	model := &fakeModel{}
+	env := testkit.NewAPI(t, config.Config{}, model)
+	ctx, _ := env.SignUp(t, "hishaam")
+	_, setIDs := shoulders(t, env, ctx) // six sets of 20 kg × 15, ticked
+	var weID uuid.UUID
+	if err := env.Pool.QueryRow(context.Background(), "SELECT workout_exercise_id FROM sets WHERE id = $1", setIDs[0]).Scan(&weID); err != nil {
+		t.Fatal(err)
+	}
+
+	_, cards := call(t, env, ctx, model, nil, toolUse{"propose_change", map[string]any{"title": "Fix shoulders", "sets": []map[string]any{
+		{"op": "update", "set_id": setIDs[0].String(), "kind": "warmup", "per_side": true},
+		{"op": "update", "set_id": setIDs[0].String(), "reps": 12, "unit": "lb", "done": false},
+		{"op": "add", "workout_exercise_id": weID.String(), "weight": "25", "reps": 10, "duration_s": 40, "distance_m": 5.5},
+	}}})
+	card := cards[0]
+	if len(card.GetBase()) != 1 || card.GetBase()[0].GetId() != setIDs[0].String() {
+		t.Fatalf("base %v, want the one edited set once", card.GetBase())
+	}
+	var edited, added *milo.Set
+	for _, c := range card.GetChanges() {
+		if s := c.GetSet(); s.GetId() == setIDs[0].String() {
+			edited = s
+		} else if s != nil {
+			added = s
+		}
+	}
+	if edited.GetWeight() != "20" || edited.GetReps() != 12 || edited.GetWeightUnit() != milo.WeightUnit_WEIGHT_UNIT_LB ||
+		!edited.GetPerSide() || edited.GetDone() || edited.GetKind() != milo.SetKind_SET_KIND_WARMUP {
+		t.Fatalf("edited set %v", edited)
+	}
+	if added.GetPosition() != 7 || added.GetWeight() != "25" || added.GetReps() != 10 || !added.GetDone() ||
+		added.GetDurationS() != 40 || added.GetDistanceM() != 5.5 || added.GetWeightUnit() != milo.WeightUnit_WEIGHT_UNIT_KG {
+		t.Fatalf("added set %v", added)
 	}
 }

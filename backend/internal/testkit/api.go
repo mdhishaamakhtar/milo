@@ -2,7 +2,6 @@ package testkit
 
 import (
 	"context"
-	"log/slog"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -39,7 +38,7 @@ func NewAPI(t testing.TB, cfg config.Config, model agent.Model) *API {
 	if cfg.Model == "" {
 		cfg.Model = config.DefaultModel
 	}
-	srv := httptest.NewServer(server.New(server.Deps{Config: cfg, Pool: pool, Logger: slog.New(slog.DiscardHandler), Model: model}))
+	srv := httptest.NewServer(server.New(server.Deps{Config: cfg, Pool: pool, Model: model}))
 	t.Cleanup(srv.Close)
 	c := connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL))
 	return &API{

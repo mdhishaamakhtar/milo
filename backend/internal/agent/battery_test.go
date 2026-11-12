@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -144,6 +143,7 @@ type batteryResult struct {
 //
 // MILO_BATTERY_RUN narrows it to scenarios matching a pattern; MILO_MODEL picks the model.
 func TestBattery(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("MILO_BATTERY") != "1" {
 		t.Skip("set MILO_BATTERY=1 to run the battery against a real history")
 	}
@@ -176,7 +176,7 @@ func TestBattery(t *testing.T) {
 	}
 	defer func() { _, _ = pool.Exec(ctx, "DELETE FROM sessions WHERE token_hash = $1", hash[:]) }()
 
-	srv := httptest.NewServer(server.New(server.Deps{Config: cfg, Pool: pool, Logger: slog.New(slog.DiscardHandler)}))
+	srv := httptest.NewServer(server.New(server.Deps{Config: cfg, Pool: pool}))
 	defer srv.Close()
 	conn := connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL))
 	client := miloconnect.NewMiloServiceClient(conn)

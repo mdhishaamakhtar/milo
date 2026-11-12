@@ -33,7 +33,6 @@ type Service struct {
 	modelName     string
 	dailyTokenCap int64
 	now           func() time.Time
-	log           *slog.Logger
 }
 
 type Options struct {
@@ -41,17 +40,13 @@ type Options struct {
 	ModelName     string
 	DailyTokenCap int64
 	Now           func() time.Time
-	Logger        *slog.Logger
 }
 
 func NewService(pool *pgxpool.Pool, o Options) *Service {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
-	if o.Logger == nil {
-		o.Logger = slog.Default()
-	}
-	return &Service{pool: pool, q: query.New(pool), model: o.Model, modelName: o.ModelName, dailyTokenCap: o.DailyTokenCap, now: o.Now, log: o.Logger}
+	return &Service{pool: pool, q: query.New(pool), model: o.Model, modelName: o.ModelName, dailyTokenCap: o.DailyTokenCap, now: o.Now}
 }
 
 var _ miloconnect.MiloServiceHandler = (*Service)(nil)
@@ -115,10 +110,10 @@ func (s *Service) Send(ctx context.Context, req *milo.SendRequest, stream miloco
 	if err != nil {
 		var te turnError
 		if !errors.As(err, &te) {
-			s.log.Error("agent turn failed", "err", err, "conversation", convID)
+			slog.Error("agent turn failed", "err", err, "conversation", convID)
 			te = turnError{msg: "Something went wrong on Milo's side. Try again.", retryable: true}
 		} else if te.cause != nil {
-			s.log.Warn("agent turn ended early", "err", te.cause, "conversation", convID)
+			slog.Warn("agent turn ended early", "err", te.cause, "conversation", convID)
 		}
 		t.saveText(ctx, "assistant", te.msg)
 		if sendErr := stream.Send(&milo.SendResponse{Event: &milo.SendResponse_Error{Error: &milo.MiloError{Message: te.msg, Retryable: te.retryable}}}); sendErr != nil {

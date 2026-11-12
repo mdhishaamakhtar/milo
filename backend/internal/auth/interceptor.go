@@ -71,7 +71,7 @@ func UserID(ctx context.Context) uuid.UUID {
 	return c.userID
 }
 
-// WithUserID returns a context authenticated as userID, for tests and server-side jobs.
+// WithUserID returns a context authenticated as userID, for calling a service directly in tests.
 func WithUserID(ctx context.Context, userID uuid.UUID) context.Context {
 	return context.WithValue(ctx, ctxKey{}, caller{userID: userID})
 }

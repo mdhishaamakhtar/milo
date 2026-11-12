@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -23,7 +22,6 @@ import (
 type Deps struct {
 	Config config.Config
 	Pool   *pgxpool.Pool
-	Logger *slog.Logger
 	// Model replaces the Claude API in tests. When nil, the API key in Config is used.
 	Model agent.Model
 }
@@ -39,7 +37,7 @@ func New(d Deps) http.Handler {
 	miloconnect.RegisterAuthServiceHandler(rpc, auth.NewService(d.Pool, d.Config.InviteCode, time.Now))
 	miloconnect.RegisterSyncServiceHandler(rpc, sync.NewService(d.Pool))
 	miloconnect.RegisterMiloServiceHandler(rpc, agent.NewService(d.Pool, agent.Options{
-		Model: model, ModelName: d.Config.Model, DailyTokenCap: d.Config.DailyTokenCap, Logger: d.Logger,
+		Model: model, ModelName: d.Config.Model, DailyTokenCap: d.Config.DailyTokenCap,
 	}))
 
 	mux := http.NewServeMux()

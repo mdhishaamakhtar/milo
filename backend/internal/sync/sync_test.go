@@ -2,6 +2,7 @@ package sync_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +12,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/mdhishaamakhtar/milo/backend/gen/milo"
+	"github.com/mdhishaamakhtar/milo/backend/internal/auth"
 	"github.com/mdhishaamakhtar/milo/backend/internal/config"
+	"github.com/mdhishaamakhtar/milo/backend/internal/db/query"
+	"github.com/mdhishaamakhtar/milo/backend/internal/sync"
 	"github.com/mdhishaamakhtar/milo/backend/internal/testkit"
 )
 
@@ -62,6 +66,7 @@ func setsByID(changes []*milo.Change) map[string]*milo.Set {
 }
 
 func TestSyncFirstPullIncludesBuiltIns(t *testing.T) {
+	t.Parallel()
 	env := testkit.NewAPI(t, config.Config{}, nil)
 	ctx, _ := env.SignUp(t, "hishaam")
 
@@ -87,6 +92,7 @@ func TestSyncFirstPullIncludesBuiltIns(t *testing.T) {
 }
 
 func TestSyncRoundTrip(t *testing.T) {
+	t.Parallel()
 	env := testkit.NewAPI(t, config.Config{}, nil)
 	ctx, _ := env.SignUp(t, "hishaam")
 	_, cursor := pullAll(t, env, ctx, 0)
@@ -162,6 +168,7 @@ func TestSyncRoundTrip(t *testing.T) {
 }
 
 func TestSyncWeightKeepsWhatWasTyped(t *testing.T) {
+	t.Parallel()
 	env := testkit.NewAPI(t, config.Config{}, nil)
 	ctx, _ := env.SignUp(t, "hishaam")
 	weID := uuid.New()
@@ -185,6 +192,7 @@ func TestSyncWeightKeepsWhatWasTyped(t *testing.T) {
 }
 
 func TestSyncPushOlderUpdateIgnored(t *testing.T) {
+	t.Parallel()
 	env := testkit.NewAPI(t, config.Config{}, nil)
 	ctx, _ := env.SignUp(t, "hishaam")
 	setID, weID := uuid.New(), uuid.New()
@@ -209,6 +217,7 @@ func TestSyncPushOlderUpdateIgnored(t *testing.T) {
 }
 
 func TestSyncTombstonePropagates(t *testing.T) {
+	t.Parallel()
 	env := testkit.NewAPI(t, config.Config{}, nil)
 	ctx, _ := env.SignUp(t, "hishaam")
 	setID, weID := uuid.New(), uuid.New()
@@ -229,6 +238,7 @@ func TestSyncTombstonePropagates(t *testing.T) {
 }
 
 func TestSyncPagination(t *testing.T) {
+	t.Parallel()
 	env := testkit.NewAPI(t, config.Config{}, nil)
 	ctx, _ := env.SignUp(t, "hishaam")
 	weID := uuid.New()
@@ -260,6 +270,7 @@ func TestSyncPagination(t *testing.T) {
 }
 
 func TestSyncRejectsForeignRow(t *testing.T) {
+	t.Parallel()
 	env := testkit.NewAPI(t, config.Config{}, nil)
 	alice, _ := env.SignUp(t, "alice")
 	bob, _ := env.SignUp(t, "bob")
@@ -299,32 +310,138 @@ func TestSyncRejectsForeignRow(t *testing.T) {
 	}
 }
 
-func TestSyncRejectsBadInputAndRollsBack(t *testing.T) {
+// A row the server can't store is refused with a reason the app's log can show, and the
+// whole push is rolled back: nothing from it is kept.
+func TestSyncRefusesRowsItCantStore(t *testing.T) {
+	t.Parallel()
 	env := testkit.NewAPI(t, config.Config{}, nil)
 	ctx, _ := env.SignUp(t, "hishaam")
-	workoutID := uuid.New()
+	bench := builtinID(t, env, "Bench Press (Barbell)")
+	at := ts(testkit.At(0))
+	workout := func(w *milo.Workout) *milo.Change { return &milo.Change{Row: &milo.Change_Workout{Workout: w}} }
+	many := make([]*milo.Change, 2001)
+	for i := range many {
+		many[i] = workoutChange(uuid.New(), "W", testkit.At(0))
+	}
 
-	_, err := env.Sync.Sync(ctx, &milo.SyncRequest{Changes: []*milo.Change{
-		workoutChange(workoutID, "Legs", testkit.At(0)),
-		setChange(uuid.New(), uuid.New(), "forty", testkit.At(0), false),
-	}})
-	testkit.WantCode(t, err, connect.CodeInvalidArgument)
-
-	_, err = env.Sync.Sync(ctx, &milo.SyncRequest{Changes: []*milo.Change{
-		{Row: &milo.Change_Workout{Workout: &milo.Workout{Id: uuid.NewString(), StartedAt: ts(testkit.At(0))}}},
-	}})
-	testkit.WantCode(t, err, connect.CodeInvalidArgument)
-
+	for _, c := range []struct {
+		name string
+		req  *milo.SyncRequest
+		code connect.Code
+		want string
+	}{
+		{"a negative cursor", &milo.SyncRequest{Cursor: -1}, connect.CodeInvalidArgument, "cursor can't be negative"},
+		{"too many changes", &milo.SyncRequest{Changes: many}, connect.CodeInvalidArgument, "at most 2000"},
+		{"a change with no row", &milo.SyncRequest{Changes: []*milo.Change{{}}}, connect.CodeInvalidArgument, "change has no row"},
+		{"a row without updated_at", &milo.SyncRequest{Changes: []*milo.Change{workout(&milo.Workout{Id: uuid.NewString(), StartedAt: at})}}, connect.CodeInvalidArgument, "needs updated_at"},
+		{"a bad id", &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_ExercisePref{ExercisePref: &milo.ExercisePref{ExerciseId: "bench", UpdatedAt: at}}}}}, connect.CodeInvalidArgument, "is not a UUID"},
+		{"a workout without a start", &milo.SyncRequest{Changes: []*milo.Change{workout(&milo.Workout{Id: uuid.NewString(), UpdatedAt: at})}}, connect.CodeInvalidArgument, "needs started_at"},
+		{"a workout with a bad template id", &milo.SyncRequest{Changes: []*milo.Change{workout(&milo.Workout{Id: uuid.NewString(), StartedAt: at, TemplateId: "push", UpdatedAt: at})}}, connect.CodeInvalidArgument, "is not a UUID"},
+		{"an exercise without a name", &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_Exercise{Exercise: &milo.Exercise{Id: uuid.NewString(), UpdatedAt: at}}}}}, connect.CodeInvalidArgument, "needs a name"},
+		{"a change to a built-in exercise", &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_Exercise{Exercise: &milo.Exercise{Id: bench.String(), Name: "My bench", UpdatedAt: at}}}}}, connect.CodePermissionDenied, "isn't yours to change"},
+		{"a workout exercise without its exercise", &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_WorkoutExercise{WorkoutExercise: &milo.WorkoutExercise{Id: uuid.NewString(), WorkoutId: uuid.NewString(), UpdatedAt: at}}}}}, connect.CodeInvalidArgument, "needs a workout_id and an exercise_id"},
+		{"a set without its exercise", &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_Set{Set: &milo.Set{Id: uuid.NewString(), UpdatedAt: at}}}}}, connect.CodeInvalidArgument, "needs a workout_exercise_id"},
+		{"a weight that isn't a number", &milo.SyncRequest{Changes: []*milo.Change{workoutChange(uuid.New(), "Legs", testkit.At(0)), setChange(uuid.New(), uuid.New(), "forty", testkit.At(0), false)}}, connect.CodeInvalidArgument, "must be a plain decimal"},
+		{"a reading without a time", &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_BodyMeasurement{BodyMeasurement: &milo.BodyMeasurement{Id: uuid.NewString(), UpdatedAt: at}}}}}, connect.CodeInvalidArgument, "needs measured_at"},
+		{"a template without a name", &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_Template{Template: &milo.Template{Id: uuid.NewString(), UpdatedAt: at}}}}}, connect.CodeInvalidArgument, "needs a name"},
+		{"a template item without an exercise", &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_Template{Template: &milo.Template{Id: uuid.NewString(), Name: "Push", Items: []*milo.TemplateItem{{}}, UpdatedAt: at}}}}}, connect.CodeInvalidArgument, "item without a valid exercise_id"},
+	} {
+		_, err := env.Sync.Sync(ctx, c.req)
+		if connect.CodeOf(err) != c.code || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: got %v, want %v saying %q", c.name, err, c.code, c.want)
+		}
+	}
 	all, _ := pullAll(t, env, ctx, 0)
 	for _, c := range all {
-		if c.GetWorkout() != nil {
-			t.Fatal("a rejected push left a workout behind")
+		if c.GetWorkout() != nil || c.GetTemplate() != nil {
+			t.Fatalf("a refused push left %v behind", c)
+		}
+	}
+
+	// What a workout may carry comes back as it went up.
+	id, template, health := uuid.New(), uuid.New(), uuid.New()
+	if _, err := env.Sync.Sync(ctx, &milo.SyncRequest{Changes: []*milo.Change{workout(&milo.Workout{
+		Id: id.String(), Name: "Legs", StartedAt: at, EndedAt: ts(testkit.At(time.Hour)), TemplateId: template.String(), HealthUuid: health.String(), UpdatedAt: at,
+	})}}); err != nil {
+		t.Fatal(err)
+	}
+	all, _ = pullAll(t, env, ctx, 0)
+	for _, c := range all {
+		if w := c.GetWorkout(); w != nil && (w.GetTemplateId() != template.String() || w.GetHealthUuid() != health.String() || !w.GetEndedAt().AsTime().Equal(testkit.At(time.Hour))) {
+			t.Fatalf("workout came back as %v", w)
 		}
 	}
 }
 
 func TestSyncNeedsSignIn(t *testing.T) {
+	t.Parallel()
 	env := testkit.NewAPI(t, config.Config{}, nil)
 	_, err := env.Sync.Sync(context.Background(), &milo.SyncRequest{})
 	testkit.WantCode(t, err, connect.CodeUnauthenticated)
+}
+
+// A failure on the server reaches the phone as a plain "something went wrong", never the
+// database's own message. Over HTTP the sign-in check would fail first, so this calls the
+// service directly.
+func TestSyncHidesDatabaseErrors(t *testing.T) {
+	t.Parallel()
+	pool, _ := testkit.DB(t)
+	svc := sync.NewService(pool)
+	pool.Close()
+	ctx := auth.WithUserID(context.Background(), uuid.New())
+
+	for name, req := range map[string]*milo.SyncRequest{
+		"pull": {},
+		"push": {Changes: []*milo.Change{workoutChange(uuid.New(), "Push", testkit.At(0))}},
+	} {
+		_, err := svc.Sync(ctx, req)
+		testkit.WantCode(t, err, connect.CodeInternal)
+		if !strings.HasSuffix(err.Error(), ": Something went wrong on the server.") {
+			t.Errorf("%s: the phone was told %q", name, err)
+		}
+	}
+}
+
+// Most people never enter a birth date, and clearing one must sync too.
+func TestSettingsWithoutABirthDateSync(t *testing.T) {
+	t.Parallel()
+	env := testkit.NewAPI(t, config.Config{}, nil)
+	ctx, _ := env.SignUp(t, "hishaam")
+	push := func(birthDate string, at time.Time) {
+		t.Helper()
+		if _, err := env.Sync.Sync(ctx, &milo.SyncRequest{Changes: []*milo.Change{{Row: &milo.Change_Settings{Settings: &milo.Settings{
+			DisplayUnit: milo.WeightUnit_WEIGHT_UNIT_LB, RestDefaultS: 90, BirthDate: birthDate, UpdatedAt: ts(at),
+		}}}}}); err != nil {
+			t.Fatalf("push settings with birth date %q: %v", birthDate, err)
+		}
+	}
+	birthDate := func() string {
+		changes, _ := pullAll(t, env, ctx, 0)
+		for _, c := range changes {
+			if s := c.GetSettings(); s != nil {
+				return s.GetBirthDate()
+			}
+		}
+		t.Fatal("no settings pulled")
+		return ""
+	}
+
+	push("", testkit.At(time.Minute))
+	if got := birthDate(); got != "" {
+		t.Fatalf("birth date %q, want none", got)
+	}
+	push("1995-04-02", testkit.At(2*time.Minute))
+	push("", testkit.At(3*time.Minute))
+	if got := birthDate(); got != "" {
+		t.Fatalf("birth date %q after clearing it, want none", got)
+	}
+}
+
+func builtinID(t *testing.T, env *testkit.API, name string) uuid.UUID {
+	t.Helper()
+	e, err := query.New(env.Pool).GetBuiltinExerciseByName(context.Background(), name)
+	if err != nil {
+		t.Fatalf("built-in %q: %v", name, err)
+	}
+	return e.ID
 }

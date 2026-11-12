@@ -10,6 +10,7 @@ import (
 )
 
 func TestEnumNames(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		enum protoreflect.Enum
 		name string
@@ -34,6 +35,7 @@ func TestEnumNames(t *testing.T) {
 }
 
 func TestValidWeight(t *testing.T) {
+	t.Parallel()
 	for w, ok := range map[string]bool{"": true, "45": true, "20.41": true, "15.875": true, "1.2345": false, "forty": false, "-5": false, "1234567": false} {
 		if rows.ValidWeight(w) != ok {
 			t.Errorf("ValidWeight(%q) = %v, want %v", w, !ok, ok)

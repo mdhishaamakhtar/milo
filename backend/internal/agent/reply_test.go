@@ -8,6 +8,7 @@ import (
 // However the model's words are cut into pieces on the way in, the answer
 // arrives whole and the suggestions line never does.
 func TestReplyHoldsBackSuggestionsHoweverItIsSplit(t *testing.T) {
+	t.Parallel()
 	const answer, line = "Bench is up > last month.\n\nChest press dipped.", "\n\n>> Chart my bench press | Start a pull day"
 	text := answer + line
 	for a := 0; a <= len(text); a++ {
