@@ -164,18 +164,12 @@ func displayKg(kg float64, unit string) float64 {
 
 // kgText shows a kilogram total in the user's display unit with thousands separators: "2,142 kg".
 func kgText(kg float64, displayUnit string) string {
-	v := kg
-	if displayUnit == "lb" {
-		v = kg / maths.KgPerLb
-	}
-	return thousands(int64(v+0.5)) + " " + displayUnit
+	return thousands(int64(displayKg(kg, displayUnit)+0.5)) + " " + displayUnit
 }
 
+// thousands is a count or a total with separators: "12,450". Totals are never negative.
 func thousands(n int64) string {
 	s := strconv.FormatInt(n, 10)
-	if n < 0 {
-		return "-" + thousands(-n)
-	}
 	for i := len(s) - 3; i > 0; i -= 3 {
 		s = s[:i] + "," + s[i:]
 	}
