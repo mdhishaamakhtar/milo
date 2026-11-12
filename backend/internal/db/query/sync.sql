@@ -46,7 +46,8 @@ ORDER BY server_seq LIMIT sqlc.arg(lim);
 -- name: UpsertSettings :execrows
 INSERT INTO settings (user_id, display_unit, rest_default_s, height_cm, birth_date, sex, updated_at)
 VALUES (sqlc.arg(user_id), sqlc.arg(display_unit), sqlc.arg(rest_default_s), sqlc.narg(height_cm)::double precision,
-    CAST(NULLIF(sqlc.arg(birth_date)::text, '') AS date), sqlc.arg(sex), sqlc.arg(updated_at))
+    -- A birth date must be a real day; none is stored as '', as the column says.
+    COALESCE(CAST(NULLIF(sqlc.arg(birth_date)::text, '') AS date)::text, ''), sqlc.arg(sex), sqlc.arg(updated_at))
 ON CONFLICT (user_id) DO UPDATE SET
     display_unit = EXCLUDED.display_unit, rest_default_s = EXCLUDED.rest_default_s,
     height_cm = EXCLUDED.height_cm, birth_date = EXCLUDED.birth_date, sex = EXCLUDED.sex,

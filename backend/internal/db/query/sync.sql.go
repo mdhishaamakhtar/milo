@@ -604,7 +604,8 @@ func (q *Queries) UpsertSet(ctx context.Context, arg UpsertSetParams) (int64, er
 const upsertSettings = `-- name: UpsertSettings :execrows
 INSERT INTO settings (user_id, display_unit, rest_default_s, height_cm, birth_date, sex, updated_at)
 VALUES ($1, $2, $3, $4::double precision,
-    CAST(NULLIF($5::text, '') AS date), $6, $7)
+    -- A birth date must be a real day; none is stored as '', as the column says.
+    COALESCE(CAST(NULLIF($5::text, '') AS date)::text, ''), $6, $7)
 ON CONFLICT (user_id) DO UPDATE SET
     display_unit = EXCLUDED.display_unit, rest_default_s = EXCLUDED.rest_default_s,
     height_cm = EXCLUDED.height_cm, birth_date = EXCLUDED.birth_date, sex = EXCLUDED.sex,
