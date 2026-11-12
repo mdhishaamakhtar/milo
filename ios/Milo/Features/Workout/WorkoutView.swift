@@ -43,10 +43,18 @@ private struct WorkoutScreen: View {
             // One stable container: an inset on a ScrollView belongs to that scroll view, and
             // switching content would rebuild the add field and drop its focus.
             ZStack { content }
-                // The keyboard goes away the way it does in Messages: drag the content down, or
-                // tap it. The tap still reaches whatever was tapped.
-                .scrollDismissesKeyboard(.interactively)
+                // While the add field has the keyboard, the content holds still: a swipe down or
+                // a tap puts the keyboard away (the tap still reaches what was tapped) instead of
+                // pulling the list past its top. Once the keyboard is down it scrolls as usual.
+                .scrollDisabled(fieldFocused)
                 .simultaneousGesture(TapGesture().onEnded { fieldFocused = false }, including: fieldFocused ? .all : .subviews)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 12).onChanged { drag in
+                        if drag.translation.height > abs(drag.translation.width) { fieldFocused = false }
+                    },
+                    including: fieldFocused ? .all : .subviews)
+                // An exercise's note has the keyboard in the list itself: drag it away as you scroll.
+                .scrollDismissesKeyboard(.interactively)
                 .safeAreaInset(edge: .bottom) {
                     bottom
                         .animation(.settle, value: model.editing != nil)
