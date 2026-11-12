@@ -194,6 +194,26 @@ extension View {
     func focusesOnTap(_ focused: FocusState<Bool>.Binding) -> some View {
         background { Color.clear.contentShape(.rect).onTapGesture { focused.wrappedValue = true } }
     }
+
+    /// Return in a field that grows to several lines (`axis: .vertical`) types a line break and
+    /// never calls `onSubmit`: the field gains an empty second line and the text rides up.
+    /// This takes that one typed break back out and runs `action`. Pasted text keeps its breaks.
+    func onReturn(in text: Binding<String>, perform action: @escaping () -> Void) -> some View {
+        onChange(of: text.wrappedValue) { old, new in
+            guard returnTyped(old: old, new: new) else { return }
+            text.wrappedValue = old
+            action()
+        }
+    }
+}
+
+/// `new` is `old` with a single line break typed into it.
+func returnTyped(old: String, new: String) -> Bool {
+    guard new.count == old.count + 1 else { return false }
+    let o = Array(old), n = Array(new)
+    var i = 0
+    while i < o.count, o[i] == n[i] { i += 1 }
+    return n[i] == "\n" && n[(i + 1)...].elementsEqual(o[i...])
 }
 
 /// "Deleted Legs, Undo" on glass, for five seconds after a delete. It's a control floating

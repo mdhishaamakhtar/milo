@@ -18,7 +18,7 @@ struct AddField: View {
                     .lineLimit(1...4)
                     .focused(focused)
                     .submitLabel(.send)
-                    .onSubmit(send)
+                    .onReturn(in: $model.query, perform: send)
             }
             MicButton(text: $model.query)
             if !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
