@@ -58,13 +58,14 @@ make ios         # generate the Xcode project and open it
 make test        # server tests against a real Postgres
 make ios-test    # app tests on a simulator (SIM="iPhone 18 Pro Max" to pick one)
 make lint        # buf lint and go vet
+make cover       # branch coverage of the server (gobco), region coverage of the app's logic
 make gen         # after editing a .proto or .sql file
 make live        # Milo against the real model, about a cent
 make battery AS=username   # about 60 real questions over that user's history in the local database, about 15 cents
 make phone       # Release build on the plugged-in iPhone, pointed at production
 ```
 
-Server tests start a throwaway Postgres with Testcontainers. `MILO_TEST_DATABASE_URL=postgres://milo:milo@localhost:5433/milo?sslmode=disable` uses the compose one instead and is faster.
+Server tests start one throwaway Postgres with Testcontainers for the whole run, copy each test's database from a migrated template and run in parallel. `MILO_TEST_DATABASE_URL=postgres://milo:milo@localhost:5433/milo?sslmode=disable` uses the compose one instead. CONTRIBUTING.md says which test a change needs.
 
 ## Rules that are easy to break
 
