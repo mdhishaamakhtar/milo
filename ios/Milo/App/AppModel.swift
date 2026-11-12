@@ -26,6 +26,8 @@ final class AppModel {
     var showingWorkout = false
     var showingMilo = false
     var showingProfile = false
+    /// On History the Ask bar is the search: it has opened into a field there.
+    var searchingHistory = false
     /// Milo started a workout: it opens once Milo's sheet is out of the way.
     var workoutStartedByMilo = false
     /// What Milo is told about where the user is when they ask.
@@ -44,6 +46,13 @@ final class AppModel {
             guard let self else { return }
             showingWorkout = (try? db.writer.read { try db.runningWorkout($0) }) != nil
         }
+    }
+
+    /// Opens Milo with `text` already sent, as if typed there, from the screen underneath.
+    func ask(_ text: String) {
+        milo.resetIfIdle()
+        showingMilo = true
+        Task { await milo.send(text, context: miloContext) }
     }
 
     /// Call after any edit: syncs a couple of seconds later.
@@ -156,7 +165,7 @@ struct MiloContext: Equatable {
     var chip: String?
 
     static let today = MiloContext(screen: "today", prompt: "Ask Milo, or tell it what you did")
-    static let history = MiloContext(screen: "history", prompt: "Ask about any workout or date")
+    static let history = MiloContext(screen: "history", prompt: "Search, or ask about any workout")
     static let progress = MiloContext(screen: "progress", prompt: "Ask about your progress")
 
     static func workout(_ id: UUID, name: String, day: String) -> MiloContext {

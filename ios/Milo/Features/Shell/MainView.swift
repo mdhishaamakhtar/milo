@@ -18,8 +18,17 @@ struct MainView: View {
                 NavigationStack { ProgressTab().miloDestinations() }
             }
         }
-        .tabViewBottomAccessory {
-            AskMiloBar(prompt: app.miloContext.prompt) { app.showingMilo = true }
+        // While History searches, its field has the bottom edge and the bar steps away.
+        .askBar(shown: !app.searchingHistory) {
+            // On History the bar is also the search: it opens into a field there, and what's
+            // typed goes to Milo only when sent.
+            if app.miloContext == .history {
+                AskMiloBar(prompt: app.miloContext.prompt, hint: "Searches your workouts, or asks Milo") {
+                    withAnimation(.settle) { app.searchingHistory = true }
+                }
+            } else {
+                AskMiloBar(prompt: app.miloContext.prompt) { app.showingMilo = true }
+            }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .undoBar(above: 132)
@@ -36,9 +45,21 @@ struct MainView: View {
     }
 }
 
+extension View {
+    /// The Ask bar above the tab bar. Taking it away needs iOS 26.1; on 26.0 it stays.
+    @ViewBuilder func askBar<Bar: View>(shown: Bool, @ViewBuilder _ bar: () -> Bar) -> some View {
+        if #available(iOS 26.1, *) {
+            tabViewBottomAccessory(isEnabled: shown, content: bar)
+        } else {
+            tabViewBottomAccessory(content: bar)
+        }
+    }
+}
+
 /// The bar that opens Milo, with a prompt that follows the screen.
 struct AskMiloBar: View {
     let prompt: String
+    var hint = "Opens Milo"
     let open: () -> Void
     /// Above the tab bar it shows the full prompt; beside a minimised tab bar, just "Ask Milo".
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
@@ -65,7 +86,7 @@ struct AskMiloBar: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(prompt)
-        .accessibilityHint("Opens Milo")
+        .accessibilityHint(hint)
     }
 }
 

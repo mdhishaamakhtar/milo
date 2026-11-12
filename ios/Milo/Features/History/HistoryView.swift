@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// Every finished workout: a month calendar, then the list by month. Search finds a
-/// workout by its name or an exercise in it.
+/// Every finished workout: a month calendar, then the list by month. The Ask bar searches
+/// here: it opens into a field, typing finds a workout by its name or an exercise in it,
+/// and sending asks Milo.
 struct HistoryView: View {
     @Environment(AppModel.self) private var app
     @State private var workouts = Live<[WorkoutSummary]>([])
     @State private var month = MonthCalendar.monthStart(.now)
     @State private var query = ""
-    @State private var searching = false
+    @FocusState private var searchFocused: Bool
+
+    private var search: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
         ScrollView {
@@ -19,16 +22,17 @@ struct HistoryView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .card()
                 } else {
-                    if query.isEmpty { MonthCalendar(month: $month, workouts: workouts.value) }
+                    if search.isEmpty { MonthCalendar(month: $month, workouts: workouts.value) }
                     ForEach(groups, id: \.title) { group in
                         SectionHeader(group.title)
                         WorkoutList(workouts: group.workouts)
                     }
-                    if !query.isEmpty && groups.isEmpty {
-                        Text("No workouts match \u{201C}\(query)\u{201D}.")
+                    if !search.isEmpty && groups.isEmpty {
+                        Text("No workouts match \u{201C}\(search)\u{201D}.")
                             .font(.sub).foregroundStyle(Color.tx2).padding(.horizontal, 4)
                     }
                 }
+                if !search.isEmpty { AskMiloRow(text: search, ask: ask).padding(.top, 16) }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
@@ -37,24 +41,34 @@ struct HistoryView: View {
         .refreshable { await app.sync.sync() }
         .miloScreen()
         .tabTitle("History")
-        // The system search field, finding a workout by its name or an exercise in it. It waits
-        // under the title (pull down, or tap the search button) and closes with its own ✕.
-        // Not `.searchToolbarBehavior(.minimize)`: in a TabView on iOS 27.0 to 27.2 its close
-        // button leaves SwiftUI's search state on, and SwiftUI opens it again. Not a field that
-        // always shows either: the bar adds it after the first layout, and the large title
-        // starts collapsed.
-        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Workout or exercise")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { searching = true } label: { Label("Search", systemImage: "magnifyingglass") }
-                    .tint(Color.tx)
+        // While searching, the field takes the tab bar's place: on the keyboard, or on the
+        // bottom edge once the keyboard is away and the results are being read.
+        .toolbar(app.searchingHistory ? .hidden : .automatic, for: .tabBar)
+        .safeAreaInset(edge: .bottom) {
+            if app.searchingHistory {
+                SearchField(text: $query, focused: $searchFocused, ask: ask, close: closeSearch)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        // Put away with nothing typed, the search is over.
+        .onChange(of: searchFocused) { _, focused in if !focused && search.isEmpty { closeSearch() } }
         .onAppear {
             app.miloContext = .history
             let db = app.db
             workouts.watch(db) { try db.finishedWorkouts($0) }
         }
+    }
+
+    private func ask() {
+        let text = search
+        closeSearch()
+        app.ask(text)
+    }
+
+    private func closeSearch() {
+        searchFocused = false
+        query = ""
+        withAnimation(.settle) { app.searchingHistory = false }
     }
 
     /// "67 workouts since Sep 2024".
@@ -66,7 +80,7 @@ struct HistoryView: View {
     }
 
     private var groups: [(title: String, workouts: [WorkoutSummary])] {
-        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = search.lowercased()
         let shown = q.isEmpty ? workouts.value : workouts.value.filter { w in
             w.workout.name.lowercased().contains(q) || w.exerciseNames.contains { $0.lowercased().contains(q) }
         }
@@ -83,6 +97,86 @@ struct HistoryView: View {
         Calendar.current.isDate(date, equalTo: .now, toGranularity: .year)
             ? date.formatted(.dateTime.month(.wide))
             : date.formatted(.dateTime.month(.wide).year())
+    }
+}
+
+/// History's Ask bar opened into a field: typing searches the list, the arrow asks Milo,
+/// and the ✕ beside it ends the search.
+private struct SearchField: View {
+    @Binding var text: String
+    var focused: FocusState<Bool>.Binding
+    let ask: () -> Void
+    let close: () -> Void
+
+    private var empty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var body: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                HStack(spacing: 11) {
+                    HStack(alignment: .top, spacing: 11) {
+                        BarMLogo(size: 18).onFirstLine(of: .sofia(16.5, .regular)).allowsHitTesting(false)
+                        TextField("Search workouts, or ask Milo", text: $text, axis: .vertical)
+                            .font(.sofia(16.5, .regular))
+                            .lineLimit(1...4)
+                            .focused(focused)
+                            .submitLabel(.search)
+                            // The results are already showing: Search just puts the keyboard away.
+                            .onReturn(in: $text) { focused.wrappedValue = false }
+                    }
+                    MicButton(text: $text)
+                    if !empty {
+                        Button(action: ask) {
+                            Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(Color.bg)
+                                .frame(width: 38, height: 38).background(Color.tx, in: .circle)
+                        }
+                        .buttonStyle(.row)
+                        .accessibilityLabel("Ask Milo")
+                    }
+                }
+                .padding(.leading, 17)
+                .padding(.trailing, 7)
+                .padding(.vertical, 7)
+                .focusesOnTap(focused)
+                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 26))
+                .animation(.quick, value: empty)
+
+                Button(action: close) {
+                    Image(systemName: "xmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(Color.tx)
+                        .frame(width: 52, height: 52)
+                        .contentShape(.circle)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("Close search")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 6)
+        .onAppear { focused.wrappedValue = true }
+    }
+}
+
+/// Under the results: what was typed, handed to Milo to answer from the whole log.
+private struct AskMiloRow: View {
+    let text: String
+    let ask: () -> Void
+
+    var body: some View {
+        Button(action: ask) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                BarMLogo(size: 18)
+                VStack(alignment: .leading, spacing: Space.rowText) {
+                    Text("Ask Milo").font(.sofia(16, .semibold))
+                    Text("\u{201C}\(text)\u{201D}").font(.sofia(14, .regular)).foregroundStyle(Color.tx2).lineLimit(2)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .background(Color.s1, in: .rect(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.line))
+        }
+        .buttonStyle(.row)
     }
 }
 
