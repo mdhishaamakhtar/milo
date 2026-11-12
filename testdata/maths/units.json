@@ -16,5 +16,6 @@
   {"name": "show 40 kg in kg", "input": {"op": "display", "weight": "40", "unit": "kg", "display_unit": "kg"}, "expected": {"text": "40"}},
   {"name": "show 12.5 lb in lb", "input": {"op": "display", "weight": "12.5", "unit": "lb", "display_unit": "lb"}, "expected": {"text": "12.5"}},
   {"name": "show 60.25 kg in kg", "input": {"op": "display", "weight": "60.25", "unit": "kg", "display_unit": "kg"}, "expected": {"text": "60.3"}},
-  {"name": "empty weight shows nothing", "input": {"op": "display", "weight": "", "unit": "kg", "display_unit": "lb"}, "expected": {"text": ""}}
+  {"name": "empty weight shows nothing", "input": {"op": "display", "weight": "", "unit": "kg", "display_unit": "lb"}, "expected": {"text": ""}},
+  {"name": "unreadable weight shows nothing", "input": {"op": "display", "weight": "forty", "unit": "kg", "display_unit": "lb"}, "expected": {"text": ""}}
 ]

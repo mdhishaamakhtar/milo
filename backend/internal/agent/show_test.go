@@ -33,6 +33,7 @@ func logged(t *testing.T, env *testkit.API, ctx context.Context, model *fakeMode
 }
 
 func TestProgressPutsEveryLiftOnOneCard(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -75,6 +76,7 @@ func TestProgressPutsEveryLiftOnOneCard(t *testing.T) {
 }
 
 func TestTrainingAndMuscleCards(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -113,6 +115,7 @@ func TestTrainingAndMuscleCards(t *testing.T) {
 }
 
 func TestSuggestedRepliesBecomeButtons(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -140,6 +143,7 @@ func TestSuggestedRepliesBecomeButtons(t *testing.T) {
 }
 
 func TestReadsInOneReplyAllAnswer(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -164,6 +168,7 @@ func TestReadsInOneReplyAllAnswer(t *testing.T) {
 }
 
 func TestDeletingSeveralWorkoutsIsOneCard(t *testing.T) {
+	t.Parallel()
 	model := &fakeModel{}
 	env := testkit.NewAPI(t, config.Config{}, model)
 	ctx, _ := env.SignUp(t, "hishaam")
@@ -175,5 +180,52 @@ func TestDeletingSeveralWorkoutsIsOneCard(t *testing.T) {
 	if len(cards) != 1 || cards[0].GetTitle() != "Delete 2 workouts" || !cards[0].GetDestructive() || cards[0].GetAutoApply() ||
 		cards[0].GetSubtitle() != "3 sets in all" || len(cards[0].GetLines()) != 2 || rowsOf(cards[0])["workout deleted"] != 2 {
 		t.Fatalf("card %v, rows %v", cards[0], rowsOf(cards[0]))
+	}
+}
+
+// Each chart draws what it says: a lift's volume or estimated best since a day, lifts
+// compared on one chart, and training as bars by week or by month.
+func TestChartsDrawWhatTheyAreAskedFor(t *testing.T) {
+	t.Parallel()
+	model := &fakeModel{}
+	env := testkit.NewAPI(t, config.Config{}, model)
+	ctx, _ := env.SignUp(t, "hishaam")
+	bench, squat := builtin(t, env, "Bench Press (Barbell)"), builtin(t, env, "Squat (Barbell)")
+	logged(t, env, ctx, model, "Push", bench, 40, "50", 8, 8)
+	logged(t, env, ctx, model, "Push", bench, 20, "55", 8)
+	logged(t, env, ctx, model, "Push", bench, 10, "60", 5)
+	logged(t, env, ctx, model, "Legs", squat, 9, "80", 5)
+	since := time.Now().UTC().AddDate(0, 0, -25).Format(time.DateOnly)
+
+	_, cards := call(t, env, ctx, model, nil,
+		toolUse{"show_chart", map[string]any{"metric": "volume", "exercise_id": bench.String(), "date_from": since}},
+		toolUse{"show_chart", map[string]any{"metric": "e1rm", "exercise_id": bench.String()}},
+		toolUse{"show_chart", map[string]any{"metric": "top_set", "exercise_id": bench.String(), "compare_with": []string{squat.String()}}},
+		toolUse{"show_training", map[string]any{"metric": "sets"}},
+		toolUse{"show_training", map[string]any{"metric": "minutes", "by": "month"}},
+		toolUse{"show_training", map[string]any{"metric": "volume"}},
+	)
+	volume, e1rm, compared, sets, minutes, tonnage := cards[0], cards[1], cards[2], cards[3], cards[4], cards[5]
+
+	// From 25 days back: the first session is left out.
+	if volume.GetTitle() != "Bench Press (Barbell), volume" || len(volume.GetChart().GetPoints()) != 2 || volume.GetChart().GetPoints()[0].GetLabel() != "440 kg" {
+		t.Fatalf("volume: %q %v", volume.GetTitle(), volume.GetChart().GetPoints())
+	}
+	if e1rm.GetTitle() != "Bench Press (Barbell), estimated 1RM" || len(e1rm.GetChart().GetPoints()) != 3 || !strings.HasPrefix(e1rm.GetSubtitle(), "70 kg on ") {
+		t.Fatalf("e1rm: %q / %q", e1rm.GetTitle(), e1rm.GetSubtitle())
+	}
+	if compared.GetTitle() != "Bench Press vs Squat, top set" || len(compared.GetChart().GetSeries()) != 2 || compared.GetExerciseId() != "" {
+		t.Fatalf("compared: %q, %d lines, opens %q", compared.GetTitle(), len(compared.GetChart().GetSeries()), compared.GetExerciseId())
+	}
+	for _, c := range []*milo.Card{sets, minutes, tonnage} {
+		if !c.GetChart().GetBars() || len(c.GetStats()) != 3 || c.GetStats()[0].GetValue() != "4" {
+			t.Fatalf("%q: bars %v, stats %v", c.GetTitle(), c.GetChart().GetBars(), c.GetStats())
+		}
+	}
+	if sets.GetTitle() != "Sets a week" || minutes.GetTitle() != "Minutes a month" || tonnage.GetTitle() != "Volume a week" {
+		t.Fatalf("titles %q, %q, %q", sets.GetTitle(), minutes.GetTitle(), tonnage.GetTitle())
+	}
+	if n := len(minutes.GetChart().GetPoints()); n < 3 || n > 4 {
+		t.Fatalf("twelve weeks by month gave %d bars", n)
 	}
 }

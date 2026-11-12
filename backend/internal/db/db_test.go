@@ -2,7 +2,10 @@ package db_test
 
 import (
 	"context"
+	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/mdhishaamakhtar/milo/backend/internal/db"
 	"github.com/mdhishaamakhtar/milo/backend/internal/db/query"
@@ -10,8 +13,14 @@ import (
 )
 
 func TestOpenMigratesAndSeeds(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	pool, url := testkit.DB(t)
+	url := testkit.EmptyDB(t)
+	pool, err := db.Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
 	q := query.New(pool)
 
 	count, err := q.CountBuiltinExercises(ctx)
@@ -49,5 +58,28 @@ func TestOpenMigratesAndSeeds(t *testing.T) {
 	}
 	if count2 != count || bench2.ServerSeq != before {
 		t.Fatalf("second Open changed built-ins: count %d→%d, server_seq %d→%d", count, count2, before, bench2.ServerSeq)
+	}
+}
+
+// The API doesn't start on a database it can't use, and says why.
+func TestOpenFailsClearly(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	if _, err := db.Open(ctx, "postgres://milo:milo@127.0.0.1:1/milo?sslmode=disable&connect_timeout=2"); err == nil || !strings.HasPrefix(err.Error(), "ping:") {
+		t.Fatalf("nothing listening: got %v, want a ping error", err)
+	}
+
+	// A migration that fails stops the start.
+	url := testkit.EmptyDB(t)
+	conn, err := pgx.Connect(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	if _, err := conn.Exec(ctx, "CREATE TABLE exercises (id int)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Open(ctx, url); err == nil || !strings.HasPrefix(err.Error(), "migrate:") {
+		t.Fatalf("got %v, want a migrate error", err)
 	}
 }

@@ -17,6 +17,7 @@ import (
 // TestLiveEvals runs Milo against the real Claude API. It costs money, so it
 // only runs with MILO_LIVE=1 (key from the repo-root .env).
 func TestLiveEvals(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("MILO_LIVE") != "1" {
 		t.Skip("set MILO_LIVE=1 to run against the Claude API")
 	}

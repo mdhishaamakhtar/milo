@@ -17,14 +17,15 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := run(logger); err != nil {
-		logger.Error("api stopped", "err", err)
+	// JSON lines on stdout, for Railway's log search. Every package logs through slog's default.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	if err := run(); err != nil {
+		slog.Error("api stopped", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(logger *slog.Logger) error {
+func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func run(logger *slog.Logger) error {
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           server.New(server.Deps{Config: cfg, Pool: pool, Logger: logger}),
+		Handler:           server.New(server.Deps{Config: cfg, Pool: pool}),
 		Protocols:         &protocols,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
@@ -54,7 +55,7 @@ func run(logger *slog.Logger) error {
 
 	errc := make(chan error, 1)
 	go func() {
-		logger.Info("listening", "port", cfg.Port, "model", cfg.Model, "signup_open", cfg.InviteCode != "")
+		slog.Info("listening", "port", cfg.Port, "model", cfg.Model, "signup_open", cfg.InviteCode != "")
 		errc <- srv.ListenAndServe()
 	}()
 

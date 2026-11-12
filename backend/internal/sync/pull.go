@@ -12,11 +12,11 @@ import (
 	"github.com/mdhishaamakhtar/milo/backend/internal/rows"
 )
 
-// Pull returns up to limit of the user's rows (and built-in exercises) changed
+// pull returns up to limit of the user's rows (and built-in exercises) changed
 // after cursor, oldest first, with the new cursor and whether more remain.
 // Each table is read up to limit+1 rows; the smallest limit of those across
 // all tables are exactly the next page.
-func Pull(ctx context.Context, q *query.Queries, userID uuid.UUID, cursor int64, limit int) ([]*milo.Change, int64, bool, error) {
+func pull(ctx context.Context, q *query.Queries, userID uuid.UUID, cursor int64, limit int) ([]*milo.Change, int64, bool, error) {
 	type item struct {
 		seq int64
 		row any
