@@ -675,7 +675,7 @@ func (t *turn) setExercisePreferences(ctx context.Context, in exercisePrefsInput
 		case *r == 0 && row.RestS != nil:
 			row.RestS = nil
 			said = append(said, "rest back to the default")
-		case *r < 0 || *r > 900:
+		case *r != 0 && (*r < 10 || *r > 900):
 			return nil, badInput("rest_s must be between 10 and 900 seconds, or 0 for the default")
 		case *r > 0 && (row.RestS == nil || *row.RestS != *r):
 			row.RestS = r
