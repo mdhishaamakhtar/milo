@@ -19,17 +19,31 @@ struct CardView: View {
     @Environment(AppModel.self) private var app
     @State private var editingExercise: Exercise?
 
+    /// How a card is drawn: folded into a line with Undo, the small rename card, or in full.
+    enum Layout: Equatable { case banner, rename, full }
+
+    static func layout(_ card: Milo_Card, _ state: MiloSession.CardState) -> Layout {
+        switch (card.kind, state) {
+        // A done card always folds; an applied one folds unless it's a chart or a workout.
+        case (.done, _),
+             (_, .applied) where card.kind != .chart && card.kind != .workout:
+            .banner
+        case (.change, _) where card.lines.count == 1 && card.lines[0].label == "Workout name":
+            .rename
+        default:
+            .full
+        }
+    }
+
     var body: some View {
         let state = session.state(card)
         Group {
-            switch (card.kind, state) {
-            // A done card always folds; an applied one folds unless it's a chart or a workout.
-            case (.done, _),
-                 (_, .applied) where card.kind != .chart && card.kind != .workout:
+            switch Self.layout(card, state) {
+            case .banner:
                 AppliedBanner(card: card, state: state, open: startsWorkout ? openRunning : nil) { session.undo(card) }
-            case (.change, _) where card.lines.count == 1 && card.lines[0].label == "Workout name":
+            case .rename:
                 renameCard(state)
-            default:
+            case .full:
                 fullCard(state)
             }
         }

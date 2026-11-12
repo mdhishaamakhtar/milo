@@ -9,13 +9,14 @@ final class APIClient: Sendable {
     let sync: Milo_SyncServiceClient
     let milo: Milo_MiloServiceClient
 
-    init(baseURL: String) {
+    /// `http` stands in for the network in tests.
+    init(baseURL: String, http: (any HTTPClientInterface)? = nil) {
         self.baseURL = baseURL
         let session = URLSessionConfiguration.default
         session.timeoutIntervalForRequest = 30
         session.waitsForConnectivity = false
         let client = ProtocolClient(
-            httpClient: URLSessionHTTPClient(configuration: session),
+            httpClient: http ?? URLSessionHTTPClient(configuration: session),
             config: ProtocolClientConfig(host: baseURL, networkProtocol: .connect, codec: ProtoCodec())
         )
         auth = Milo_AuthServiceClient(client: client)
@@ -41,7 +42,6 @@ struct APIError: Error, LocalizedError {
 
     var errorDescription: String? { message }
     var isUnauthenticated: Bool { code == .unauthenticated }
-    var isOffline: Bool { code == .unavailable || code == .deadlineExceeded || code == .unknown && message.isEmpty }
 
     init(_ e: ConnectError) {
         code = e.code
