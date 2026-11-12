@@ -43,10 +43,14 @@ private struct WorkoutScreen: View {
             // One stable container: an inset on a ScrollView belongs to that scroll view, and
             // switching content would rebuild the add field and drop its focus.
             ZStack { content }
+                // The keyboard goes away the way it does in Messages: drag the content down, or
+                // tap it. The tap still reaches whatever was tapped.
+                .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(TapGesture().onEnded { fieldFocused = false }, including: fieldFocused ? .all : .subviews)
                 .safeAreaInset(edge: .bottom) {
                     bottom
                         .animation(.settle, value: model.editing != nil)
-                        .animation(.settle, value: model.restEndsAt != nil)
+                        .animation(.settle, value: app.rest.endsAt != nil)
                 }
                 .miloScreen()
                 .toolbar { toolbar }
@@ -54,7 +58,12 @@ private struct WorkoutScreen: View {
                 .navigationDestination(isPresented: $finishing) { FinishView() }
         }
         .undoBar(above: 84)
-        .onChange(of: model.detail.value == nil) { _, gone in if gone { dismiss() } }
+        // The workout was finished, discarded or deleted: no rest after it.
+        .onChange(of: model.detail.value == nil) { _, gone in
+            guard gone else { return }
+            if model.workoutID == nil { app.rest.stop() }
+            dismiss()
+        }
         // An exercise went in: put the keyboard away so its sets show.
         .onChange(of: model.entries.count) { old, new in if new > old { fieldFocused = false } }
         .onAppear {
@@ -73,7 +82,6 @@ private struct WorkoutScreen: View {
             Conversation(session: milo, say: ask, onAdded: added)
         } else if !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
             ScrollView { MatchList(ask: ask).padding(.horizontal, 16).padding(.top, 8) }
-                .scrollDismissesKeyboard(.interactively)
         } else if model.entries.isEmpty {
             EmptyStart(ask: ask)
         } else {
@@ -93,7 +101,6 @@ private struct WorkoutScreen: View {
                     .animation(.settle, value: model.current?.id)
                     .animation(.settle, value: model.entries.map(\.id))
                 }
-                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: model.current?.id) { _, id in withAnimation(.settle) { proxy.scrollTo(id, anchor: .top) } }
             }
         }
@@ -107,8 +114,8 @@ private struct WorkoutScreen: View {
             // render together and the timer grow out of the field.
             GlassEffectContainer(spacing: 8) {
             VStack(spacing: 8) {
-                if let end = model.restEndsAt, !talking {
-                    RestBar(endsAt: end).transition(.move(edge: .bottom).combined(with: .opacity))
+                if let end = app.rest.endsAt, !talking {
+                    RestBar(rest: app.rest, endsAt: end).transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 AddField(
                     placeholder: talking ? "Correct it, e.g. \"it was a cable\"" : model.entries.isEmpty ? "Exercise name, or describe it" : model.isPast ? "Add an exercise, or tell Milo" : "Next exercise, or tell Milo",

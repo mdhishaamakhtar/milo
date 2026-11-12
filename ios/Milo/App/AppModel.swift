@@ -3,6 +3,7 @@ import GRDB
 import MiloAPI
 import Observation
 import OSLog
+import UserNotifications
 
 /// Everything the screens share: the store, the API, the session, sync, and
 /// which full-screen pieces are showing.
@@ -14,6 +15,7 @@ final class AppModel {
     let sync: SyncEngine
     let connectivity = Connectivity()
     let health: HealthService
+    let rest = RestTimer()
     /// The conversation with Milo, kept while the app runs so closing the sheet doesn't lose it.
     @ObservationIgnored private(set) lazy var milo = MiloSession(app: self)
 
@@ -37,6 +39,11 @@ final class AppModel {
         session = Session(db: db)
         sync = SyncEngine(db: db, api: api, session: session)
         health = HealthService(db: db)
+        UNUserNotificationCenter.current().delegate = rest
+        rest.openWorkout = { [weak self] in
+            guard let self else { return }
+            showingWorkout = (try? db.writer.read { try db.runningWorkout($0) }) != nil
+        }
     }
 
     /// Call after any edit: syncs a couple of seconds later.

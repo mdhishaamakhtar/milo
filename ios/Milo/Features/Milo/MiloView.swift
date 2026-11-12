@@ -380,6 +380,7 @@ struct Composer: View {
             .accessibilityLabel("Send")
         }
         .padding(.leading, 17).padding(.trailing, 7).padding(.vertical, 7)
+        .focusesOnTap(focused)
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 26))
     }
 }

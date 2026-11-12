@@ -24,9 +24,12 @@ struct MainView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .undoBar(above: 132)
         .environment(\.workoutSpace, workoutSpace)
-        // The workout grows out of its card on Today and tucks back into it.
+        // The workout grows out of its card on Today and tucks back into it. Only its chevron
+        // tucks it away: the zoom's own drag-down took swipes meant for the list or the keyboard.
         .fullScreenCover(isPresented: $app.showingWorkout) {
-            WorkoutView().navigationTransition(.zoom(sourceID: WorkoutSource.id, in: workoutSpace))
+            WorkoutView()
+                .navigationTransition(.zoom(sourceID: WorkoutSource.id, in: workoutSpace))
+                .interactiveDismissDisabled()
         }
         .sheet(isPresented: $app.showingMilo, onDismiss: app.miloClosed) { MiloView() }
         .sheet(isPresented: $app.showingProfile) { ProfileView() }

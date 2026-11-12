@@ -5,7 +5,8 @@ import OSLog
 import UIKit
 
 /// The workout screen's state: which exercise is open, which number is being typed,
-/// the rest timer, and the add field. It shows the running workout, or edits a finished one.
+/// and the add field. It shows the running workout, or edits a finished one. The rest timer
+/// is the app's (`AppModel.rest`), so it keeps going while the screen is tucked away.
 @Observable
 final class WorkoutModel {
     let app: AppModel
@@ -21,9 +22,6 @@ final class WorkoutModel {
     var padText = ""
     /// The first key replaces the old value; later keys add to it.
     var padFresh = true
-    var restEndsAt: Date?
-    var restTotal: TimeInterval = 60
-    var restForSet = 0
     var query = ""
 
     struct Editing: Equatable {
@@ -72,8 +70,7 @@ final class WorkoutModel {
             app.edited()
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             if done && !isPast {
-                let rest = entry.restS ?? settings.value.restDefaultS
-                startRest(seconds: rest, nextSet: (entry.sets.firstIndex { $0.id == set.id } ?? 0) + 2)
+                startRest(after: set, in: entry)
                 if entry.sets.allSatisfy({ $0.id == set.id || $0.done }) { openID = nil }
             }
         } catch {
@@ -125,7 +122,7 @@ final class WorkoutModel {
     func discard() {
         guard let w = detail.value?.workout else { return }
         closePad()
-        restEndsAt = nil
+        app.rest.stop()
         app.deleteWorkout(w, message: "Workout discarded")
     }
 
@@ -251,19 +248,15 @@ final class WorkoutModel {
 
     // MARK: Rest
 
-    func startRest(seconds: Int, nextSet: Int) {
-        restTotal = TimeInterval(seconds)
-        restEndsAt = Date().addingTimeInterval(restTotal)
-        restForSet = nextSet
-    }
-
-    func addRest(_ seconds: TimeInterval) {
-        guard let end = restEndsAt else { return }
-        restEndsAt = end.addingTimeInterval(seconds)
-        restTotal += seconds
-    }
-
-    func skipRest() {
-        restEndsAt = nil
+    /// Starts the rest after a set: until the next set not yet ticked, or the next exercise.
+    private func startRest(after set: LoggedSet, in entry: ExerciseEntry) {
+        let seconds = entry.restS ?? settings.value.restDefaultS
+        if let i = entry.sets.firstIndex(where: { !$0.done && $0.id != set.id }) {
+            app.rest.start(seconds: seconds, next: "set \(i + 1)", alert: "\(entry.exercise.shortName), set \(i + 1)")
+        } else if let e = entries.first(where: { $0.id != entry.id && !$0.isFinished }) {
+            app.rest.start(seconds: seconds, next: e.exercise.shortName, alert: "Next: \(e.exercise.shortName)")
+        } else {
+            app.rest.start(seconds: seconds, next: nil, alert: "")
+        }
     }
 }

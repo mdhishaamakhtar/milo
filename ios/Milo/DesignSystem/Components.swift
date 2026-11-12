@@ -186,6 +186,14 @@ struct SheetToolbar: ToolbarContent {
 extension View {
     /// The Undo bar for the last delete, floating `above` points over the bottom edge.
     func undoBar(above: CGFloat) -> some View { modifier(UndoBar(above: above)) }
+
+    /// Makes a whole glass field take a tap. A text field only answers on its line of text, and
+    /// a thumb at the bottom of the screen often lands on the field's edge instead. Put it after
+    /// the field's padding; anything drawn over it that isn't a control needs
+    /// `.allowsHitTesting(false)`.
+    func focusesOnTap(_ focused: FocusState<Bool>.Binding) -> some View {
+        background { Color.clear.contentShape(.rect).onTapGesture { focused.wrappedValue = true } }
+    }
 }
 
 /// "Deleted Legs, Undo" on glass, for five seconds after a delete. It's a control floating

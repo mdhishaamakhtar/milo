@@ -12,7 +12,7 @@ struct AddField: View {
         @Bindable var model = model
         HStack(spacing: 11) {
             HStack(alignment: .top, spacing: 11) {
-                BarMLogo(size: 18).onFirstLine(of: .sofia(16.5, .regular))
+                BarMLogo(size: 18).onFirstLine(of: .sofia(16.5, .regular)).allowsHitTesting(false)
                 TextField(placeholder, text: $model.query, axis: .vertical)
                     .font(.sofia(16.5, .regular))
                     .lineLimit(1...4)
@@ -33,6 +33,7 @@ struct AddField: View {
         .padding(.leading, 17)
         .padding(.trailing, 7)
         .padding(.vertical, 7)
+        .focusesOnTap(focused)
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 26))
         .animation(.quick, value: model.query.isEmpty)
     }

@@ -102,7 +102,7 @@ struct NumberPad: View {
 
 /// The rest countdown, above the add field.
 struct RestBar: View {
-    @Environment(WorkoutModel.self) private var model
+    let rest: RestTimer
     let endsAt: Date
 
     var body: some View {
@@ -113,10 +113,10 @@ struct RestBar: View {
                 Text(Format.clock(Int(left.rounded(.up)))).font(.sofia(22, .bold)).monospacedDigit()
                     .contentTransition(.numericText(countsDown: true))
                     .animation(.quick, value: Int(left.rounded(.up)))
-                Text(left > 0 ? "rest, then set \(model.restForSet)" : "rest over").font(.sub).foregroundStyle(Color.tx2).lineLimit(1)
+                Text(left > 0 ? rest.next.map { "rest, then \($0)" } ?? "rest" : "rest over").font(.sub).foregroundStyle(Color.tx2).lineLimit(1)
                 Spacer(minLength: 4)
-                Button("+15 s") { model.addRest(15) }.buttonStyle(.chip)
-                Button("Skip") { model.skipRest() }.buttonStyle(.chip)
+                Button("+15 s") { rest.add(15) }.buttonStyle(.chip)
+                Button("Skip") { rest.stop() }.buttonStyle(.chip)
             }
             .padding(.leading, 18)
             .padding(.trailing, 8)
@@ -124,7 +124,7 @@ struct RestBar: View {
             .overlay(alignment: .bottomLeading) {
                 GeometryReader { geo in
                     Capsule().fill(Color.or)
-                        .frame(width: geo.size.width * (1 - left / max(model.restTotal, 1)), height: 3)
+                        .frame(width: geo.size.width * (1 - left / max(rest.total, 1)), height: 3)
                         .animation(.linear(duration: 0.25), value: left)
                         .frame(maxHeight: .infinity, alignment: .bottom)
                 }
@@ -133,11 +133,10 @@ struct RestBar: View {
             }
             .glassEffect(.regular, in: .capsule)
             .onChange(of: left == 0) { _, over in
-                if over {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if model.restEndsAt == endsAt { model.skipRest() } }
-                }
+                if over { UINotificationFeedbackGenerator().notificationOccurred(.success) }
             }
         }
+        .onAppear { rest.barShowing = true }
+        .onDisappear { rest.barShowing = false }
     }
 }

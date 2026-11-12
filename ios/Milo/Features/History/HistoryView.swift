@@ -7,6 +7,7 @@ struct HistoryView: View {
     @State private var workouts = Live<[WorkoutSummary]>([])
     @State private var month = MonthCalendar.monthStart(.now)
     @State private var query = ""
+    @State private var searching = false
 
     var body: some View {
         ScrollView {
@@ -36,10 +37,19 @@ struct HistoryView: View {
         .refreshable { await app.sync.sync() }
         .miloScreen()
         .tabTitle("History")
-        // The system search: a glass search button that opens into a field, finding a workout
-        // by its name or an exercise in it.
-        .searchable(text: $query, prompt: "Workout or exercise")
-        .searchToolbarBehavior(.minimize)
+        // The system search field, finding a workout by its name or an exercise in it. It waits
+        // under the title (pull down, or tap the search button) and closes with its own ✕.
+        // Not `.searchToolbarBehavior(.minimize)`: in a TabView on iOS 27.0 to 27.2 its close
+        // button leaves SwiftUI's search state on, and SwiftUI opens it again. Not a field that
+        // always shows either: the bar adds it after the first layout, and the large title
+        // starts collapsed.
+        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Workout or exercise")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { searching = true } label: { Label("Search", systemImage: "magnifyingglass") }
+                    .tint(Color.tx)
+            }
+        }
         .onAppear {
             app.miloContext = .history
             let db = app.db
