@@ -99,10 +99,12 @@ final class SyncEngine {
 /// Whether the phone has a network path, for Milo's offline notice.
 @Observable
 final class Connectivity {
-    private(set) var isOnline = true
+    var isOnline = true
     private let monitor = NWPathMonitor()
 
-    init() {
+    /// Unwatched, it says online until told otherwise.
+    init(watching: Bool = true) {
+        guard watching else { return }
         monitor.pathUpdateHandler = { [weak self] path in
             let online = path.status == .satisfied
             Task { @MainActor in self?.isOnline = online }

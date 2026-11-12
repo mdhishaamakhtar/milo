@@ -6,7 +6,9 @@ struct MiloApp: App {
 
     init() {
         do {
-            _app = State(initialValue: AppModel(db: try .onDisk()))
+            _app = State(initialValue: Self.hostingTests
+                ? AppModel(db: try .inMemory(), keychain: Keychain(service: "dev.hishaam.milo.tests"), onDevice: false)
+                : AppModel(db: try .onDisk()))
         } catch {
             fatalError("Milo can't open its database: \(error)")
         }
@@ -29,12 +31,20 @@ struct MiloApp: App {
         bar.compactAppearance = appearance
     }
 
+    /// The app is only hosting its tests: it shows nothing, so it doesn't open the real
+    /// store, read the real Keychain or sync while they run.
+    static let hostingTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(app)
-                .preferredColorScheme(.dark)
-                .tint(.or)
+            if Self.hostingTests {
+                Color.bg.ignoresSafeArea()
+            } else {
+                RootView()
+                    .environment(app)
+                    .preferredColorScheme(.dark)
+                    .tint(.or)
+            }
         }
     }
 }

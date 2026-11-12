@@ -104,18 +104,19 @@ struct Conversation: View {
     var editTemplate: ((UUID) -> Void)?
 
     /// One line of the conversation. What Milo read in a row is one line, not one per read.
-    private struct Row: Identifiable {
+    struct Row: Identifiable {
         let id: String
         let item: MiloSession.Item
         var readings: [String] = []
+        /// The first of Milo's lines after something you said: it carries Milo's name.
         let startsReply: Bool
     }
 
-    private var rows: [Row] {
+    static func rows(_ items: [MiloSession.Item], busy: Bool) -> [Row] {
         var rows: [Row] = []
-        for item in session.items {
+        for item in items {
             // What to say next only stands under the latest answer, once Milo has finished.
-            if case .card(let card) = item, card.kind == .suggestions, session.busy || item.id != session.items.last?.id { continue }
+            if case .card(let card) = item, card.kind == .suggestions, busy || item.id != items.last?.id { continue }
             let startsReply = rows.last.map { if case .user = $0.item { true } else { false } } ?? true
             if case .reading(_, let summary) = item {
                 if let last = rows.indices.last, case .reading = rows[last].item {
@@ -134,7 +135,7 @@ struct Conversation: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
-                    ForEach(rows) { row in
+                    ForEach(Self.rows(session.items, busy: session.busy)) { row in
                         self.row(row).id(row.id).transition(Self.arrival(row.item))
                     }
                     if session.isWorking {

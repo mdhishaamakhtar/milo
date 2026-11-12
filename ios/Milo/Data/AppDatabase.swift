@@ -15,12 +15,7 @@ nonisolated final class AppDatabase: Sendable {
     /// The app's database file in Application Support.
     static func onDisk() throws -> AppDatabase {
         let folder = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        let url = folder.appendingPathComponent("milo.sqlite")
-        var config = Configuration()
-        config.prepareDatabase { db in
-            db.trace(options: .statement) { _ in }
-        }
-        return try AppDatabase(DatabasePool(path: url.path, configuration: config))
+        return try AppDatabase(DatabasePool(path: folder.appendingPathComponent("milo.sqlite").path))
     }
 
     /// An empty database for tests and previews.

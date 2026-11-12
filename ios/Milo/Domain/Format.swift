@@ -94,9 +94,10 @@ nonisolated enum Format {
     }
 
     /// "today", "yesterday", or "7 Oct".
-    static func relativeDay(_ date: Date) -> String {
-        if Calendar.current.isDateInToday(date) { return "today" }
-        if Calendar.current.isDateInYesterday(date) { return "yesterday" }
+    static func relativeDay(_ date: Date, now: Date = Date()) -> String {
+        let cal = Calendar.current
+        if cal.isDate(date, inSameDayAs: now) { return "today" }
+        if cal.isDate(date, inSameDayAs: cal.date(byAdding: .day, value: -1, to: now)!) { return "yesterday" }
         return shortDay(date)
     }
 

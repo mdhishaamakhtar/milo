@@ -18,7 +18,13 @@ final class RestTimer: NSObject {
     @ObservationIgnored var openWorkout: @MainActor () -> Void = {}
     @ObservationIgnored private var alert = ""
     @ObservationIgnored private var clearing: Task<Void, Never>?
+    /// Says when rest is over with a notification.
+    private let alerts: Bool
     private static let id = "rest"
+
+    init(alerts: Bool = true) {
+        self.alerts = alerts
+    }
 
     /// `alert` is the notification's line under "Rest over", e.g. "Squat, set 2".
     func start(seconds: Int, next: String?, alert: String) {
@@ -39,7 +45,7 @@ final class RestTimer: NSObject {
     func stop() {
         endsAt = nil
         clearing?.cancel()
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [Self.id])
+        if alerts { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [Self.id]) }
     }
 
     /// Sets the notification for the new end, replacing any earlier one, and takes the bar
@@ -51,6 +57,7 @@ final class RestTimer: NSObject {
             try? await Task.sleep(for: .seconds(end.timeIntervalSinceNow + 3))
             if !Task.isCancelled, endsAt == end { endsAt = nil }
         }
+        guard alerts else { return }
 
         let content = UNMutableNotificationContent()
         content.title = "Rest over"

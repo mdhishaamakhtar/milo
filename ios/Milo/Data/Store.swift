@@ -153,22 +153,17 @@ nonisolated extension AppDatabase {
     func search(_ db: Database, _ text: String, limit: Int = 8) throws -> [ExerciseMatch] {
         let words = text.lowercased().split(separator: " ").map(String.init).filter { !$0.isEmpty }
         guard !words.isEmpty else { return [] }
-        let all = try allExercises(db)
-        let scored: [(Exercise, Int)] = all.compactMap { e in
+        let matches: [(match: ExerciseMatch, score: Int)] = try allExercises(db).compactMap { e in
             let haystack = ([e.name] + e.aliases).joined(separator: " ").lowercased()
             guard words.allSatisfy({ haystack.contains($0) }) else { return nil }
-            var score = 0
-            if e.name.lowercased().hasPrefix(words[0]) { score += 4 }
-            if !e.builtin { score += 2 }
-            return (e, score)
-        }
-        var matches: [ExerciseMatch] = []
-        for (e, score) in scored.sorted(by: { $0.1 > $1.1 }) {
             let last = try lastTime(db, exerciseId: e.id, excluding: nil)
-            matches.append(ExerciseMatch(exercise: e, lastDate: last?.0, lastText: last.map { Format.setsLine($0.1, e.measurement) }))
-            _ = score
+            let match = ExerciseMatch(exercise: e, lastDate: last?.0, lastText: last.map { Format.setsLine($0.1, e.measurement) })
+            // A name that starts with what was typed beats one that only contains it; your own beat built-ins.
+            let score = (e.name.lowercased().hasPrefix(words[0]) ? 4 : 0) + (e.builtin ? 0 : 2)
+            return (match, score)
         }
-        return Array(matches.sorted { ($0.lastDate ?? .distantPast) > ($1.lastDate ?? .distantPast) }.prefix(limit))
+        // Done most recently first, then the better match.
+        return Array(matches.sorted { ($0.match.lastDate ?? .distantPast, $0.score) > ($1.match.lastDate ?? .distantPast, $1.score) }.prefix(limit).map(\.match))
     }
 
     /// The exercises most often done first in a workout.

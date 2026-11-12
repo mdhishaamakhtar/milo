@@ -109,6 +109,9 @@ targets:
       - target: MiloAPI
       - package: SwiftProtobuf
         product: SwiftProtobuf
+      # The fake server is a Connect transport. Connect is a shared framework in the app, so this links that one.
+      - package: Connect
+        product: Connect
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -125,3 +128,10 @@ schemes:
     test:
       config: Debug
       targets: [MiloTests]
+      gatherCoverageData: true
+      coverageTargets: [Milo]
+      # The tests read dates in en-GB, London time, whatever the Mac is set to.
+      language: en
+      region: GB
+      environmentVariables:
+        TZ: Europe/London

@@ -13,9 +13,9 @@ final class AppModel {
     let api: APIClient
     let session: Session
     let sync: SyncEngine
-    let connectivity = Connectivity()
+    let connectivity: Connectivity
     let health: HealthService
-    let rest = RestTimer()
+    let rest: RestTimer
     /// The conversation with Milo, kept while the app runs so closing the sheet doesn't lose it.
     @ObservationIgnored private(set) lazy var milo = MiloSession(app: self)
 
@@ -35,13 +35,17 @@ final class AppModel {
     /// The last delete, offered back for a few seconds instead of asking first.
     var undo: Undo?
 
-    init(db: AppDatabase) {
+    /// Tests pass their own API and Keychain, and `onDevice: false`: no watching the network,
+    /// no notifications. A test host can't answer the notification prompt, and waits on it.
+    init(db: AppDatabase, api: APIClient = APIClient(baseURL: APIClient.configuredURL), keychain: Keychain = Keychain(service: "dev.hishaam.milo"), onDevice: Bool = true) {
         self.db = db
-        api = APIClient(baseURL: APIClient.configuredURL)
-        session = Session(db: db)
+        self.api = api
+        connectivity = Connectivity(watching: onDevice)
+        rest = RestTimer(alerts: onDevice)
+        session = Session(db: db, keychain: keychain)
         sync = SyncEngine(db: db, api: api, session: session)
         health = HealthService(db: db)
-        UNUserNotificationCenter.current().delegate = rest
+        if onDevice { UNUserNotificationCenter.current().delegate = rest }
         rest.openWorkout = { [weak self] in
             guard let self else { return }
             showingWorkout = (try? db.writer.read { try db.runningWorkout($0) }) != nil
