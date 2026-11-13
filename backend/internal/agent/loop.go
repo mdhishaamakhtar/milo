@@ -104,6 +104,11 @@ func (s *Service) run(ctx context.Context, t *turn, text string, first bool) err
 		msg, err := s.model.Stream(ctx, s.params(append(history, pending...)), words.write)
 		suggestions := words.finish()
 		if err != nil {
+			// What was said before the stream broke stays in the chat when it is reopened.
+			// The phone hanging up cancels ctx, so the save can't use it.
+			if said.Len() > 0 {
+				t.saveText(context.WithoutCancel(ctx), "assistant", said.String())
+			}
 			if errors.Is(ctx.Err(), context.Canceled) {
 				return turnError{msg: "Stopped.", retryable: true, cause: err}
 			}

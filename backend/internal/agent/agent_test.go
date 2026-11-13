@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/anthropics/anthropic-sdk-go/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -640,5 +641,49 @@ func TestConversationsAreSummarisedAndDeleted(t *testing.T) {
 	list, _ = env.Milo.ListConversations(alice, &milo.ListConversationsRequest{})
 	if len(list.GetConversations()) != 0 {
 		t.Fatalf("%d conversations left after deleting the only one", len(list.GetConversations()))
+	}
+}
+
+// hangUp is a model the phone hangs up on mid-sentence.
+type hangUp struct{ hang context.CancelFunc }
+
+func (h hangUp) Stream(ctx context.Context, _ anthropic.MessageNewParams, onText func(string)) (*anthropic.Message, error) {
+	onText("Your bench is ")
+	h.hang()
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// A turn the phone hangs up on still leaves the chat as it was seen: what Milo
+// had said, then that it stopped.
+func TestAStoppedTurnIsSaved(t *testing.T) {
+	t.Parallel()
+	phone, hang := context.WithCancel(context.Background())
+	defer hang()
+	env := testkit.NewAPI(t, config.Config{}, hangUp{hang})
+	ctx, _ := env.SignUp(t, "hishaam")
+	info, _ := connect.CallInfoForClientContext(ctx)
+	stream, err := env.Milo.Send(testkit.WithToken(phone, strings.TrimPrefix(info.RequestHeader().Get("Authorization"), "Bearer ")), &milo.SendRequest{Text: "how is my bench?"})
+	// The hang-up may land before the stream opens or partway through it.
+	if err == nil {
+		for err == nil {
+			_, err = stream.Receive()
+		}
+		_ = stream.Close()
+	}
+
+	// The server finishes the turn after the phone has gone.
+	var said []string
+	for deadline := time.Now().Add(10 * time.Second); len(said) < 2 && time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		rows, err := env.Pool.Query(context.Background(), "SELECT payload->>'text' FROM milo_items WHERE kind = 'assistant' ORDER BY id")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if said, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(said) != 2 || said[0] != "Your bench is " || said[1] != "Stopped." {
+		t.Fatalf("saved %q, want what was said and then Stopped.", said)
 	}
 }

@@ -115,7 +115,8 @@ func (s *Service) Send(ctx context.Context, req *milo.SendRequest, stream miloco
 		} else if te.cause != nil {
 			slog.Warn("agent turn ended early", "err", te.cause, "conversation", convID)
 		}
-		t.saveText(ctx, "assistant", te.msg)
+		// A turn the phone hung up on has a cancelled ctx; its last line is saved all the same.
+		t.saveText(context.WithoutCancel(ctx), "assistant", te.msg)
 		if sendErr := stream.Send(&milo.SendResponse{Event: &milo.SendResponse_Error{Error: &milo.MiloError{Message: te.msg, Retryable: te.retryable}}}); sendErr != nil {
 			return sendErr
 		}
