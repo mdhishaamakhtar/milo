@@ -75,7 +75,7 @@ struct ExercisesView: View {
 
     /// Deletes one of your exercises at once; Undo brings it back.
     private func delete(_ e: Exercise) {
-        guard let rows = try? app.db.deleteExercise(e.id) else { return }
+        guard let rows = app.write("delete the exercise", { try app.db.deleteExercise(e.id) }) else { return }
         app.edited()
         app.offerUndo("Deleted \(e.name)", rows: rows)
     }

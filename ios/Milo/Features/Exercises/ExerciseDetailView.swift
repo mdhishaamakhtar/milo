@@ -300,7 +300,7 @@ struct ExerciseDetailView: View {
                 Divider()
                 Button("Edit exercise", systemImage: "pencil") { editing = true }
                 Button("Delete exercise", systemImage: "trash", role: .destructive) {
-                    if let rows = try? app.db.deleteExercise(p.exercise.id) {
+                    if let rows = app.write("delete the exercise", { try app.db.deleteExercise(p.exercise.id) }) {
                         app.edited()
                         app.offerUndo("Deleted \(p.exercise.name)", rows: rows)
                     }
@@ -314,12 +314,12 @@ struct ExerciseDetailView: View {
     }
 
     private func setUnit(_ unit: WeightUnit, _ p: ExerciseProgress) {
-        try? app.db.setUnit(unit, for: p.exercise.id)
+        app.write("change the unit", { try app.db.setUnit(unit, for: p.exercise.id) })
         app.edited()
     }
 
     private func setRest(_ seconds: Int, _ p: ExerciseProgress) {
-        try? app.db.setRest(seconds, for: p.exercise.id)
+        app.write("change the rest timer", { try app.db.setRest(seconds, for: p.exercise.id) })
         app.edited()
     }
 }

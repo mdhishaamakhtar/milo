@@ -79,27 +79,27 @@ final class WorkoutModel {
     }
 
     func addSet(to entry: ExerciseEntry) {
-        _ = try? app.db.addSet(to: entry.id, done: isPast)
+        app.write("add the set", { try app.db.addSet(to: entry.id, done: isPast) })
         app.edited()
     }
 
     func setKind(_ kind: SetKind, for set: LoggedSet) {
         var s = set
         s.kind = kind
-        try? app.db.update(s)
+        app.write("save the set", { try app.db.update(s) })
         app.edited()
     }
 
     func delete(_ set: LoggedSet) {
         if editing?.setID == set.id { closePad() }
-        try? app.db.deleteSet(set.id)
+        app.write("delete the set", { try app.db.deleteSet(set.id) })
         app.edited()
     }
 
     /// Takes an exercise out at once. If sets were logged, Undo brings it back with them.
     func remove(_ entry: ExerciseEntry) {
         if let editing, entry.sets.contains(where: { $0.id == editing.setID }) { closePad() }
-        guard let rows = try? app.db.removeExercise(entry.id) else { return }
+        guard let rows = app.write("remove the exercise", { try app.db.removeExercise(entry.id) }) else { return }
         if openID == entry.id { openID = nil }
         app.edited()
         if !entry.doneSets.isEmpty { app.offerUndo("Removed \(entry.exercise.shortName)", rows: rows) }
@@ -127,18 +127,18 @@ final class WorkoutModel {
     }
 
     func setUnit(_ unit: WeightUnit, for entry: ExerciseEntry) {
-        try? app.db.setUnit(unit, for: entry.exercise.id)
+        app.write("change the unit", { try app.db.setUnit(unit, for: entry.exercise.id) })
         app.edited()
     }
 
     func setRest(_ seconds: Int, for entry: ExerciseEntry) {
-        try? app.db.setRest(seconds, for: entry.exercise.id)
+        app.write("change the rest timer", { try app.db.setRest(seconds, for: entry.exercise.id) })
         app.edited()
     }
 
     func add(_ exercise: Exercise) {
         guard let w = detail.value?.workout else { return }
-        if let we = try? app.db.addExercise(exercise.id, to: w.id) {
+        if let we = app.write("add the exercise", { try app.db.addExercise(exercise.id, to: w.id) }) {
             openID = we.id
         }
         query = ""
@@ -242,7 +242,7 @@ final class WorkoutModel {
         case .seconds:
             s.durationS = Int(padText)
         }
-        try? app.db.update(s)
+        app.write("save the set", { try app.db.update(s) })
         app.edited()
     }
 

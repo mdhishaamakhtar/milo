@@ -24,7 +24,7 @@ struct StoreReadTests {
         try db.setRest(90, for: curl.id)
         #expect(try db.writer.read { try db.unit($0, for: curl.id) } == (.lb, 90))
         // A deleted preference no longer counts.
-        try db.writer.write { try ExercisePref.filter(Column("exerciseId") == curl.id).updateAll($0, Column("deleted").set(to: true)) }
+        _ = try db.writer.write { try ExercisePref.filter(Column("exerciseId") == curl.id).updateAll($0, Column("deleted").set(to: true)) }
         #expect(try db.writer.read { try db.unit($0, for: curl.id) } == (.kg, nil))
     }
 
@@ -78,7 +78,7 @@ struct StoreReadTests {
         #expect(try db.writer.read { try db.workoutDetail($0, id: UUID()) } == nil)
 
         // An exercise the phone doesn't have (not synced yet) is left out rather than shown blank.
-        try db.writer.write { try Exercise.deleteOne($0, key: fly.id) }
+        _ = try db.writer.write { try Exercise.deleteOne($0, key: fly.id) }
         #expect(try db.writer.read { try db.workoutDetail($0, id: w.id) }?.entries.map(\.exercise.name) == ["Bench Press (Barbell)"])
     }
 
@@ -310,7 +310,7 @@ struct ProgressStoreTests {
         let w = try logWorkout(db, bench, [("65", 5)], daysAgo: 1, now: now)
         // A session with nothing ticked isn't one.
         let empty = try db.startWorkout(name: "Empty", items: [TemplateItem(exerciseId: bench.id, groupLabel: "")], now: now)
-        try db.writer.write { try Workout.filter(Column("id") == empty.id).updateAll($0, Column("endedAt").set(to: now)) }
+        _ = try db.writer.write { try Workout.filter(Column("id") == empty.id).updateAll($0, Column("endedAt").set(to: now)) }
         try db.setRest(120, for: bench.id)
         try db.save(Template(id: UUID(), name: "Push", notes: "", items: [TemplateItem(exerciseId: bench.id, groupLabel: "")], updatedAt: now, deleted: false, dirty: true))
 

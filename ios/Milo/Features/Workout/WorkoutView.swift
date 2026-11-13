@@ -276,11 +276,11 @@ private struct EmptyStart: View {
 
     private func useTemplate(_ t: Template) {
         guard let w = model.detail.value?.workout else { return }
-        for item in t.items { _ = try? app.db.addExercise(item.exerciseId, to: w.id, groupLabel: item.groupLabel) }
+        for item in t.items { app.write("add the exercise", { try app.db.addExercise(item.exerciseId, to: w.id, groupLabel: item.groupLabel) }) }
         var renamed = w
         renamed.name = t.name
         renamed.templateId = t.id
-        try? app.db.save(renamed)
+        app.write("save that", { try app.db.save(renamed) })
         app.edited()
     }
 }

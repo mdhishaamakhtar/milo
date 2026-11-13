@@ -228,13 +228,15 @@ private struct UndoBar: ViewModifier {
                 HStack(spacing: 12) {
                     Text(undo.message).font(.sofia(15.5, .medium)).lineLimit(1)
                     Spacer(minLength: 8)
-                    Button("Undo") {
-                        withAnimation(.settle) { app.undo = nil }
-                        undo.restore()
+                    if let restore = undo.restore {
+                        Button("Undo") {
+                            withAnimation(.settle) { app.undo = nil }
+                            restore()
+                        }
+                        .font(.sofia(15.5, .bold))
+                        .foregroundStyle(Color.or)
+                        .frame(minWidth: 44, minHeight: 44)
                     }
-                    .font(.sofia(15.5, .bold))
-                    .foregroundStyle(Color.or)
-                    .frame(minWidth: 44, minHeight: 44)
                 }
                 .padding(.leading, 20)
                 .padding(.trailing, 12)

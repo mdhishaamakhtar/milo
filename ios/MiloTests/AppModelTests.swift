@@ -61,11 +61,22 @@ struct AppModelTests {
         #expect(app.undo?.message == "Deleted Day")
         #expect(try db.writer.read { try db.finishedWorkouts($0) }.isEmpty)
 
-        app.undo?.restore()
+        app.undo?.restore?()
         #expect(try db.writer.read { try db.finishedWorkouts($0) }.map(\.workout.id) == [w.id])
 
         app.deleteWorkout(w, message: "Workout discarded")
         #expect(app.undo?.message == "Workout discarded")
+    }
+
+    @Test func aChangeTheStoreRefusesIsSaidNotSwallowed() throws {
+        let app = offlineApp(try freshDB())
+        struct Full: Error {}
+
+        #expect(app.write("add the set") { 3 } == 3 && app.undo == nil)
+        let nothing: Int? = app.write("add the set") { throw Full() }
+
+        #expect(nothing == nil)
+        #expect(app.undo?.message == "Couldn't add the set. Try again." && app.undo?.restore == nil)
     }
 
     @Test func nothingDeletedNothingToUndo() throws {

@@ -21,7 +21,7 @@ func logWorkout(_ db: AppDatabase, _ e: Exercise, _ sets: [(String, Int)], daysA
     let start = now.addingTimeInterval(-daysAgo * 86400)
     let w = try db.startWorkout(name: name, items: [TemplateItem(exerciseId: e.id, groupLabel: "")], templateId: templateId, now: start)
     let we = try #require(try db.writer.read { d in try WorkoutExercise.filter(Column("workoutId") == w.id).fetchOne(d) })
-    try db.writer.write { d in try LoggedSet.filter(Column("workoutExerciseId") == we.id).deleteAll(d) }
+    _ = try db.writer.write { d in try LoggedSet.filter(Column("workoutExerciseId") == we.id).deleteAll(d) }
     for (i, (weight, reps)) in sets.enumerated() {
         var s = try db.addSet(to: we.id, done: true, now: start)
         s.weight = weight; s.reps = reps; s.unit = .kg; s.position = i + 1

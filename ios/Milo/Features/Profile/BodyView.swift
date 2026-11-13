@@ -186,7 +186,7 @@ struct BodyView: View {
     }
 
     private func delete(_ m: BodyMeasurement) {
-        try? app.db.deleteBody(m.id)
+        app.write("delete the reading", { try app.db.deleteBody(m.id) })
         app.edited()
     }
 }
@@ -225,7 +225,7 @@ private struct AddReadingSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 SheetToolbar(canSave: weightKg != nil || fatPct != nil, cancel: { dismiss() }) {
-                    try? app.db.addBody(weightKg: weightKg, bodyFatPct: fatPct, at: date, source: "manual")
+                    app.write("save the reading", { try app.db.addBody(weightKg: weightKg, bodyFatPct: fatPct, at: date, source: "manual") })
                     app.edited()
                     dismiss()
                 }
@@ -288,7 +288,7 @@ private struct DetailsSheet: View {
         s.heightCm = Double(height).flatMap { (50...260).contains($0) ? $0 : nil }
         s.birthDate = hasBirthDate ? birthDate.formatted(.iso8601.year().month().day()) : ""
         s.sex = sex
-        try? app.db.save(s)
+        app.write("save that", { try app.db.save(s) })
         app.edited()
         dismiss()
     }

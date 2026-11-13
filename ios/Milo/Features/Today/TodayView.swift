@@ -100,7 +100,7 @@ struct TodayView: View {
 
     /// Deletes a template at once; Undo brings it back.
     private func deleteTemplate(_ t: Template) {
-        guard let rows = try? app.db.deleteTemplate(t.id) else { return }
+        guard let rows = app.write("delete the template", { try app.db.deleteTemplate(t.id) }) else { return }
         app.edited()
         app.offerUndo("Deleted \(t.name)", rows: rows)
     }

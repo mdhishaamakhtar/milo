@@ -94,7 +94,7 @@ struct ExerciseCard: View {
     }
 
     private func saveNote() {
-        try? model.app.db.setNote(note, for: entry.id)
+        model.app.write("save the note", { try model.app.db.setNote(note, for: entry.id) })
         model.app.edited()
     }
 

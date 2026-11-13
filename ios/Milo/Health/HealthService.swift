@@ -77,7 +77,11 @@ final class HealthService {
             for s in samples {
                 let value = s.quantity.doubleValue(for: unit)
                 let isWeight = type == HKQuantityType(.bodyMass)
-                try? db.addBody(weightKg: isWeight ? value : nil, bodyFatPct: isWeight ? nil : value * 100, at: s.endDate, source: "health", id: s.uuid)
+                do {
+                    try db.addBody(weightKg: isWeight ? value : nil, bodyFatPct: isWeight ? nil : value * 100, at: s.endDate, source: "health", id: s.uuid)
+                } catch {
+                    log.error("health: save reading: \(error.localizedDescription)")
+                }
             }
         }
         guard readProfile else { return }
@@ -92,7 +96,13 @@ final class HealthService {
         if let sex = try? store.biologicalSex().biologicalSex {
             settings.sex = switch sex { case .female: "female"; case .male: "male"; case .other: "other"; default: settings.sex }
         }
-        if settings != before { try? db.save(settings) }
+        if settings != before {
+            do {
+                try db.save(settings)
+            } catch {
+                log.error("health: save profile: \(error.localizedDescription)")
+            }
+        }
     }
 
     private func quantities(_ type: HKQuantityType, since: Date) async throws -> [HKQuantitySample] {

@@ -127,7 +127,7 @@ struct WorkoutDetailView: View {
         guard note != w.notes else { return }
         var updated = w
         updated.notes = note
-        try? app.db.save(updated)
+        app.write("save that", { try app.db.save(updated) })
         app.edited()
     }
 
@@ -136,7 +136,7 @@ struct WorkoutDetailView: View {
         guard !name.isEmpty, name != w.name else { return }
         var updated = w
         updated.name = name
-        try? app.db.save(updated)
+        app.write("save that", { try app.db.save(updated) })
         app.edited()
     }
 

@@ -85,10 +85,26 @@ final class AppModel {
 
 /// "Deleted Legs, Undo". Deletes happen at once and can be taken back, which is Apple's
 /// guidance for common destructive actions: undo, rather than a dialog before every one.
+/// With nothing to restore it is only a line to read: a change that couldn't be saved.
 struct Undo: Identifiable {
     let id = UUID()
     let message: String
-    let restore: () -> Void
+    let restore: (() -> Void)?
+}
+
+extension AppModel {
+    /// Runs a change to the log that a tap asked for. If the store refuses it, the bar at
+    /// the bottom says so: a tap never does nothing without a word.
+    @discardableResult
+    func write<T>(_ what: String, _ change: () throws -> T) -> T? {
+        do {
+            return try change()
+        } catch {
+            log.error("\(what): \(error.localizedDescription)")
+            undo = Undo(message: "Couldn't \(what). Try again.", restore: nil)
+            return nil
+        }
+    }
 }
 
 extension AppModel {

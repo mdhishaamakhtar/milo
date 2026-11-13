@@ -131,7 +131,7 @@ struct TemplateEditor: View {
         if !isNew {
             Section {
                 Button("Delete template", role: .destructive) {
-                    if let rows = try? app.db.deleteTemplate(template.id) {
+                    if let rows = app.write("delete the template", { try app.db.deleteTemplate(template.id) }) {
                         app.edited()
                         app.offerUndo("Deleted \(original.name)", rows: rows)
                     }

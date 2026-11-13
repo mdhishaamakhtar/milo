@@ -231,7 +231,7 @@ struct WorkoutModelTests {
         model.remove(try entry(model, bench))
         #expect(app.undo?.message == "Removed Bench Press" && model.editing == nil)
 
-        app.undo?.restore()
+        app.undo?.restore?()
         try await settle(model) { model.entries.count == 2 }
     }
 
