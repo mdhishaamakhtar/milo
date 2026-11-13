@@ -49,6 +49,26 @@ public nonisolated struct Milo_SyncResponse: Sendable {
   /// Call again with the new cursor (and no changes) to get the rest.
   public var hasMore_p: Bool = false
 
+  /// Pushed changes the server couldn't store. The rest of the push was kept, so
+  /// one bad row never holds up the others.
+  public var rejected: [Milo_Rejection] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Milo_Rejection: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Where the change was in the request's changes, from 0.
+  public var index: Int32 = 0
+
+  /// Why, for the app's log.
+  public var reason: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -95,7 +115,7 @@ nonisolated extension Milo_SyncRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 nonisolated extension Milo_SyncResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SyncResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{1}changes\0\u{3}has_more\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{1}changes\0\u{3}has_more\0\u{1}rejected\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -106,6 +126,7 @@ nonisolated extension Milo_SyncResponse: SwiftProtobuf.Message, SwiftProtobuf._M
       case 1: try { try decoder.decodeSingularInt64Field(value: &self.cursor) }()
       case 2: try { try decoder.decodeRepeatedMessageField(value: &self.changes) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.hasMore_p) }()
+      case 4: try { try decoder.decodeRepeatedMessageField(value: &self.rejected) }()
       default: break
       }
     }
@@ -121,6 +142,9 @@ nonisolated extension Milo_SyncResponse: SwiftProtobuf.Message, SwiftProtobuf._M
     if self.hasMore_p != false {
       try visitor.visitSingularBoolField(value: self.hasMore_p, fieldNumber: 3)
     }
+    if !self.rejected.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.rejected, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -128,6 +152,42 @@ nonisolated extension Milo_SyncResponse: SwiftProtobuf.Message, SwiftProtobuf._M
     if lhs.cursor != rhs.cursor {return false}
     if lhs.changes != rhs.changes {return false}
     if lhs.hasMore_p != rhs.hasMore_p {return false}
+    if lhs.rejected != rhs.rejected {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Milo_Rejection: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Rejection"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}reason\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.index) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.reason) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.index != 0 {
+      try visitor.visitSingularInt32Field(value: self.index, fieldNumber: 1)
+    }
+    if !self.reason.isEmpty {
+      try visitor.visitSingularStringField(value: self.reason, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Milo_Rejection, rhs: Milo_Rejection) -> Bool {
+    if lhs.index != rhs.index {return false}
+    if lhs.reason != rhs.reason {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

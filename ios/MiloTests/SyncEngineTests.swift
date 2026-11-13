@@ -140,6 +140,38 @@ struct SyncEngineTests {
         #expect(try app.db.meta(.cursor) == "4")
     }
 
+    @Test func aRowTheServerRefusesDoesNotHoldUpTheRest() async throws {
+        let server = FakeServer()
+        let app = try signedInApp(server)
+        let good = workout("Good", at: start), bad = workout("Bad", at: start)
+        try await app.db.writer.write { try good.save($0); try bad.save($0) }
+        let pushed = try await app.db.writer.read { try Synced.dirty($0, limit: 10) }.map(\.syncKey)
+        var rejection = Milo_Rejection()
+        rejection.index = Int32(try #require(pushed.firstIndex(of: bad.id)))
+        rejection.reason = "workout needs started_at"
+        var refusing = Milo_SyncResponse()
+        refusing.cursor = 3
+        refusing.rejected = [rejection]
+        server.replyToSync(.success(refusing))
+
+        await app.sync.sync()
+
+        #expect(try stored(app, good.id)?.dirty == false)
+        #expect(try stored(app, bad.id)?.dirty == true)
+        #expect(app.sync.refusedCount == 1 && app.sync.lastError == nil)
+
+        // It isn't sent again as it is, only once it has changed.
+        await app.sync.sync()
+        #expect(server.syncRequests[1].changes.isEmpty)
+        var fixed = bad
+        fixed.name = "Fixed"
+        try app.db.save(fixed, now: start.addingTimeInterval(60))
+        await app.sync.sync()
+        #expect(server.syncRequests[2].changes.map(\.workout.name) == ["Fixed"])
+        #expect(try stored(app, bad.id)?.dirty == false)
+        #expect(app.sync.refusedCount == 0)
+    }
+
     @Test func aFailedSyncKeepsChangesForTheNextTry() async throws {
         let server = FakeServer()
         let app = try signedInApp(server)

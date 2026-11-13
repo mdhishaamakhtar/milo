@@ -34,6 +34,7 @@ nonisolated final class FakeServer: HTTPClientInterface, @unchecked Sendable {
     private var sendReplies: [[Part]] = []
     private var conversations: [String: Milo_GetConversationResponse] = [:]
     private var syncGate: Gate?
+    private var cardStatusDown = false
     private var whileSyncing: (@Sendable () -> Void)?
     private var _syncRequests: [Milo_SyncRequest] = []
     private var _sent: [Milo_SendRequest] = []
@@ -53,6 +54,8 @@ nonisolated final class FakeServer: HTTPClientInterface, @unchecked Sendable {
     func replyToSend(_ parts: [Part]) { locked { sendReplies.append(parts) } }
     func store(_ conversation: Milo_GetConversationResponse, id: String) { locked { conversations[id] = conversation } }
     /// The next sync waits for the gate before it answers.
+    /// While down, card statuses can't be reported: the phone is offline as far as they go.
+    func cardStatus(down: Bool) { locked { cardStatusDown = down } }
     func holdNextSync(_ gate: Gate) { locked { syncGate = gate } }
     /// Runs while the next sync request is on the server, before it answers.
     func duringNextSync(_ body: @escaping @Sendable () -> Void) { locked { whileSyncing = body } }
@@ -99,8 +102,11 @@ nonisolated final class FakeServer: HTTPClientInterface, @unchecked Sendable {
                 response = try Self.answer(found.map { .success($0) } ?? .failure(Failure(code: .notFound, message: "No such conversation.")))
             case "/milo.MiloService/SetCardStatus":
                 let req = try Milo_SetCardStatusRequest(serializedBytes: body)
-                locked { _statuses.append(req) }
-                response = try Self.answer(.success(Milo_SetCardStatusResponse()))
+                let down = locked {
+                    if !cardStatusDown { _statuses.append(req) }
+                    return cardStatusDown
+                }
+                response = try Self.answer(down ? .failure(Failure(code: .unavailable, message: "")) : .success(Milo_SetCardStatusResponse()))
             default:
                 response = Self.error(Failure(code: .unimplemented, message: request.url.path))
             }

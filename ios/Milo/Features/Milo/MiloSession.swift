@@ -183,13 +183,7 @@ final class MiloSession {
     }
 
     private func report(_ card: Milo_Card, _ status: Milo_CardStatus) {
-        let api = app.api, token = app.session.token
-        Task {
-            var req = Milo_SetCardStatusRequest()
-            req.cardID = card.id
-            req.status = status
-            _ = await api.milo.setCardStatus(request: req, headers: APIClient.headers(token))
-        }
+        app.sync.report(card: card.id, status)
     }
 
     // MARK: Earlier conversations

@@ -129,6 +129,10 @@ struct ProfileView: View {
         if app.sync.isSyncing { return "Syncing" }
         if !app.connectivity.isOnline { return "Offline. Your log is saved here and syncs when you're back." }
         if app.sync.lastError != nil { return "Couldn't sync just now. It will try again." }
+        if app.sync.refusedCount > 0 {
+            let n = app.sync.refusedCount
+            return "\(n) \(n == 1 ? "change" : "changes") couldn't be saved to the server. \(n == 1 ? "It's" : "They're") safe on this phone."
+        }
         guard let at = app.sync.lastSynced else { return "Not synced yet" }
         return "Synced \(at.formatted(date: .omitted, time: .shortened))"
     }
@@ -153,7 +157,7 @@ struct ProfileView: View {
     private func update(_ change: (inout UserSettings) -> Void) {
         var s = data.value.settings
         change(&s)
-        try? app.db.save(s)
+        app.write("save that", { try app.db.save(s) })
         app.edited()
     }
 

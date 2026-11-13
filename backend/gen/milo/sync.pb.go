@@ -81,7 +81,10 @@ type SyncResponse struct {
 	// Rows changed on the server after the request cursor, tombstones included.
 	Changes []*Change `protobuf:"bytes,2,rep,name=changes,proto3" json:"changes,omitempty"`
 	// Call again with the new cursor (and no changes) to get the rest.
-	HasMore       bool `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	HasMore bool `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	// Pushed changes the server couldn't store. The rest of the push was kept, so
+	// one bad row never holds up the others.
+	Rejected      []*Rejection `protobuf:"bytes,4,rep,name=rejected,proto3" json:"rejected,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -137,6 +140,67 @@ func (x *SyncResponse) GetHasMore() bool {
 	return false
 }
 
+func (x *SyncResponse) GetRejected() []*Rejection {
+	if x != nil {
+		return x.Rejected
+	}
+	return nil
+}
+
+type Rejection struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Where the change was in the request's changes, from 0.
+	Index int32 `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	// Why, for the app's log.
+	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Rejection) Reset() {
+	*x = Rejection{}
+	mi := &file_milo_sync_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Rejection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Rejection) ProtoMessage() {}
+
+func (x *Rejection) ProtoReflect() protoreflect.Message {
+	mi := &file_milo_sync_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Rejection.ProtoReflect.Descriptor instead.
+func (*Rejection) Descriptor() ([]byte, []int) {
+	return file_milo_sync_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Rejection) GetIndex() int32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *Rejection) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 var File_milo_sync_proto protoreflect.FileDescriptor
 
 const file_milo_sync_proto_rawDesc = "" +
@@ -144,11 +208,15 @@ const file_milo_sync_proto_rawDesc = "" +
 	"\x0fmilo/sync.proto\x12\x04milo\x1a\x11milo/common.proto\"M\n" +
 	"\vSyncRequest\x12\x16\n" +
 	"\x06cursor\x18\x01 \x01(\x03R\x06cursor\x12&\n" +
-	"\achanges\x18\x02 \x03(\v2\f.milo.ChangeR\achanges\"i\n" +
+	"\achanges\x18\x02 \x03(\v2\f.milo.ChangeR\achanges\"\x96\x01\n" +
 	"\fSyncResponse\x12\x16\n" +
 	"\x06cursor\x18\x01 \x01(\x03R\x06cursor\x12&\n" +
 	"\achanges\x18\x02 \x03(\v2\f.milo.ChangeR\achanges\x12\x19\n" +
-	"\bhas_more\x18\x03 \x01(\bR\ahasMore2<\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\x12+\n" +
+	"\brejected\x18\x04 \x03(\v2\x0f.milo.RejectionR\brejected\"9\n" +
+	"\tRejection\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason2<\n" +
 	"\vSyncService\x12-\n" +
 	"\x04Sync\x12\x11.milo.SyncRequest\x1a\x12.milo.SyncResponseB\x7f\n" +
 	"\x10dev.hishaam.miloB\tSyncProtoP\x01Z0github.com/mdhishaamakhtar/milo/backend/gen/milo\xa2\x02\x03MXX\xaa\x02\x04Milo\xca\x02\x04Milo\xe2\x02\x10Milo\\GPBMetadata\xea\x02\x04Milob\x06proto3"
@@ -165,22 +233,24 @@ func file_milo_sync_proto_rawDescGZIP() []byte {
 	return file_milo_sync_proto_rawDescData
 }
 
-var file_milo_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_milo_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_milo_sync_proto_goTypes = []any{
 	(*SyncRequest)(nil),  // 0: milo.SyncRequest
 	(*SyncResponse)(nil), // 1: milo.SyncResponse
-	(*Change)(nil),       // 2: milo.Change
+	(*Rejection)(nil),    // 2: milo.Rejection
+	(*Change)(nil),       // 3: milo.Change
 }
 var file_milo_sync_proto_depIdxs = []int32{
-	2, // 0: milo.SyncRequest.changes:type_name -> milo.Change
-	2, // 1: milo.SyncResponse.changes:type_name -> milo.Change
-	0, // 2: milo.SyncService.Sync:input_type -> milo.SyncRequest
-	1, // 3: milo.SyncService.Sync:output_type -> milo.SyncResponse
-	3, // [3:4] is the sub-list for method output_type
-	2, // [2:3] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 0: milo.SyncRequest.changes:type_name -> milo.Change
+	3, // 1: milo.SyncResponse.changes:type_name -> milo.Change
+	2, // 2: milo.SyncResponse.rejected:type_name -> milo.Rejection
+	0, // 3: milo.SyncService.Sync:input_type -> milo.SyncRequest
+	1, // 4: milo.SyncService.Sync:output_type -> milo.SyncResponse
+	4, // [4:5] is the sub-list for method output_type
+	3, // [3:4] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_milo_sync_proto_init() }
@@ -195,7 +265,7 @@ func file_milo_sync_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_milo_sync_proto_rawDesc), len(file_milo_sync_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

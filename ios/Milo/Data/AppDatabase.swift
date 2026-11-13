@@ -137,6 +137,8 @@ nonisolated final class AppDatabase: Sendable {
 nonisolated extension AppDatabase {
     enum MetaKey: String {
         case cursor, userId, username
+        /// What became of Milo's cards, not yet told to the server: JSON, card id to status.
+        case cardReports
     }
 
     func meta(_ key: MetaKey) throws -> String? {

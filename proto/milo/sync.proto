@@ -22,4 +22,14 @@ message SyncResponse {
   repeated Change changes = 2;
   // Call again with the new cursor (and no changes) to get the rest.
   bool has_more = 3;
+  // Pushed changes the server couldn't store. The rest of the push was kept, so
+  // one bad row never holds up the others.
+  repeated Rejection rejected = 4;
+}
+
+message Rejection {
+  // Where the change was in the request's changes, from 0.
+  int32 index = 1;
+  // Why, for the app's log.
+  string reason = 2;
 }

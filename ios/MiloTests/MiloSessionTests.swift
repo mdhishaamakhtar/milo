@@ -259,6 +259,29 @@ struct MiloSessionTests {
         #expect(server.cardStatuses.map(\.status) == [.applied, .undone])
     }
 
+    @Test func whatBecameOfACardIsToldOnceTheServerIsBack() async throws {
+        let server = FakeServer()
+        let app = try signedInApp(server)
+        let (_, _, set) = try runningBench(app)
+        var heavier = set
+        heavier.weight = "70"
+        let change = card("k1", .change, title: "Fix set 1", changes: [heavier.change], base: [version(set)])
+        let session = MiloSession(app: app)
+        server.cardStatus(down: true)
+
+        session.apply(change)
+        session.undo(change)
+        try await eventually { server.calls.filter { $0 == "SetCardStatus" }.count >= 1 }
+        #expect(server.cardStatuses.isEmpty)
+
+        // Only where it ended up is worth telling.
+        server.cardStatus(down: false)
+        await app.sync.sync()
+        #expect(server.cardStatuses.map(\.status) == [.undone])
+        await app.sync.sync()
+        #expect(server.cardStatuses.count == 1)
+    }
+
     @Test func aProposedChangeWaitsThenAppliesAndUndoes() async throws {
         let server = FakeServer()
         let app = try signedInApp(server)

@@ -4,6 +4,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"connectrpc.com/connect/v2"
@@ -38,19 +39,33 @@ func (s *Service) Sync(ctx context.Context, req *milo.SyncRequest) (*milo.SyncRe
 		return nil, invalid("push at most %d changes at a time", maxPush)
 	}
 	userID := auth.UserID(ctx)
+	var rejected []*milo.Rejection
 	if len(req.GetChanges()) > 0 {
-		err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-			return pushChanges(ctx, tx, userID, req.GetChanges())
-		})
+		// Nearly every push is clean, so it is first written straight through. Only if
+		// the database itself refuses a row is it done again with a savepoint around
+		// each one, which costs two more round trips a row.
+		err := errBadRow
+		for _, careful := range []bool{false, true} {
+			if !errors.Is(err, errBadRow) {
+				break
+			}
+			err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) (err error) {
+				rejected, err = pushChanges(ctx, tx, userID, req.GetChanges(), careful)
+				return err
+			})
+		}
 		if err != nil {
 			return nil, rpcError(err)
+		}
+		for _, r := range rejected {
+			slog.Warn("sync: change refused", "user", userID, "index", r.GetIndex(), "reason", r.GetReason())
 		}
 	}
 	changes, cursor, more, err := pull(ctx, query.New(s.pool), userID, req.GetCursor(), pageSize)
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return &milo.SyncResponse{Cursor: cursor, Changes: changes, HasMore: more}, nil
+	return &milo.SyncResponse{Cursor: cursor, Changes: changes, HasMore: more, Rejected: rejected}, nil
 }
 
 // rpcError passes on errors meant for the client and hides everything else.

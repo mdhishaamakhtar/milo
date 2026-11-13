@@ -5,11 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/mdhishaamakhtar/milo/backend/gen/milo"
@@ -17,24 +19,56 @@ import (
 	"github.com/mdhishaamakhtar/milo/backend/internal/rows"
 )
 
-// pushChanges writes a user's changes inside tx. Call it in its own transaction: it
-// takes the locks that keep this user's server_seq values committing in order,
-// so a pull can never skip a row. A write older than the stored row is skipped;
-// a row that belongs to someone else (or a built-in exercise) fails the push.
-func pushChanges(ctx context.Context, tx pgx.Tx, userID uuid.UUID, changes []*milo.Change) error {
+// pushChanges writes a user's changes inside tx and returns the ones it refused.
+// Call it in its own transaction: it takes the locks that keep this user's
+// server_seq values committing in order, so a pull can never skip a row. A write
+// older than the stored row is skipped. A row that is invalid, or belongs to
+// someone else (or is a built-in exercise), is refused and the rest carry on.
+//
+// A row the database itself refuses (a check constraint) ends the transaction,
+// so that fails with errBadRow unless careful, which gives each row a savepoint
+// and refuses just that one.
+func pushChanges(ctx context.Context, tx pgx.Tx, userID uuid.UUID, changes []*milo.Change, careful bool) ([]*milo.Rejection, error) {
 	q := query.New(tx)
 	if err := q.LockAgainstBuiltinInserts(ctx); err != nil {
-		return err
+		return nil, err
 	}
 	if err := q.LockUserWrites(ctx, userID.String()); err != nil {
-		return err
+		return nil, err
 	}
-	for _, c := range changes {
-		if err := push(ctx, q, userID, c); err != nil {
-			return err
+	var rejected []*milo.Rejection
+	for i, c := range changes {
+		var err error
+		if careful {
+			err = pgx.BeginFunc(ctx, tx, func(sp pgx.Tx) error { return push(ctx, query.New(sp), userID, c) })
+		} else {
+			err = push(ctx, q, userID, c)
+		}
+		var refused *connect.Error
+		var pgErr *pgconn.PgError
+		switch {
+		case err == nil:
+		case errors.As(err, &refused):
+			rejected = append(rejected, &milo.Rejection{Index: int32(i), Reason: refused.Message()})
+		case errors.As(err, &pgErr) && isData(pgErr):
+			if !careful {
+				return nil, errBadRow
+			}
+			rejected = append(rejected, &milo.Rejection{Index: int32(i), Reason: pgErr.Message})
+		default:
+			return nil, err
 		}
 	}
-	return nil
+	return rejected, nil
+}
+
+// errBadRow says the database refused one of the rows, so the push must be redone carefully.
+var errBadRow = errors.New("the database refused a row")
+
+// isData reports whether the database is objecting to the row's values (data
+// exception, class 22; constraint violation, class 23), not to anything of ours.
+func isData(e *pgconn.PgError) bool {
+	return strings.HasPrefix(e.Code, "22") || strings.HasPrefix(e.Code, "23")
 }
 
 func push(ctx context.Context, q *query.Queries, userID uuid.UUID, c *milo.Change) error {
