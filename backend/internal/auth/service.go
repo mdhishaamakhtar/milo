@@ -33,6 +33,7 @@ type Service struct {
 	q          *query.Queries
 	inviteCode string
 	now        func() time.Time
+	attempts   attempts
 }
 
 // NewService returns the account service. An empty inviteCode closes sign-up.
@@ -84,17 +85,25 @@ func (s *Service) Register(ctx context.Context, req *milo.RegisterRequest) (*mil
 }
 
 func (s *Service) Login(ctx context.Context, req *milo.LoginRequest) (*milo.LoginResponse, error) {
-	user, err := s.q.GetUserByUsername(ctx, normalise(req.GetUsername()))
+	// Names that don't exist are counted too, so the answer never says which ones do.
+	username := normalise(req.GetUsername())
+	if s.attempts.blocked(username, s.now()) {
+		return nil, errTooManyTries()
+	}
+	user, err := s.q.GetUserByUsername(ctx, username)
 	if errors.Is(err, pgx.ErrNoRows) {
 		Verify(dummyHash, req.GetPassword())
+		s.attempts.failed(username, s.now())
 		return nil, errBadLogin()
 	}
 	if err != nil {
 		return nil, internal(err)
 	}
 	if !Verify(user.PasswordHash, req.GetPassword()) {
+		s.attempts.failed(username, s.now())
 		return nil, errBadLogin()
 	}
+	s.attempts.passed(username)
 	token, err := createSession(ctx, s.q, user.ID, s.now())
 	if err != nil {
 		return nil, internal(err)
@@ -164,14 +173,24 @@ func (s *Service) checkCurrentPassword(ctx context.Context, password string) (qu
 	if err != nil {
 		return query.User{}, internal(err)
 	}
+	// Counted under the same name as sign-in: a stolen session gets no extra guesses.
+	if s.attempts.blocked(user.Username, s.now()) {
+		return query.User{}, errTooManyTries()
+	}
 	if !Verify(user.PasswordHash, password) {
+		s.attempts.failed(user.Username, s.now())
 		return query.User{}, connect.NewError(connect.CodeUnauthenticated, "That password isn't right.")
 	}
+	s.attempts.passed(user.Username)
 	return user, nil
 }
 
 func errBadLogin() error {
 	return connect.NewError(connect.CodeUnauthenticated, "Wrong username or password.")
+}
+
+func errTooManyTries() error {
+	return connect.NewError(connect.CodeResourceExhausted, "Too many wrong passwords. Try again in 15 minutes.")
 }
 
 func normalise(username string) string {

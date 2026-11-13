@@ -134,7 +134,8 @@ counted; e1RM is Epley, for 1 to 12 reps.
 ## Smaller things
 
 - **Sign-in** is a username and password (argon2id), giving an opaque session
-  token stored hashed. Sign-up needs an invite code. (`backend/internal/auth`)
+  token stored hashed. Sign-up needs an invite code. Ten wrong passwords for a
+  name shut it for fifteen minutes. (`backend/internal/auth`)
 - **Apple Health** is the phone's business alone: finished workouts and their
   active energy are written, body weight and a few details are read.
   (`ios/Milo/Health`)

@@ -286,3 +286,46 @@ func TestDeleteAccountRemovesEverything(t *testing.T) {
 		t.Fatalf("other user's workouts = %d, want 1", others)
 	}
 }
+
+// Ten wrong passwords for a name shut it for fifteen minutes, right password or
+// not, whether or not the name exists.
+func TestWrongPasswordsLockTheName(t *testing.T) {
+	t.Parallel()
+	pool, _ := testkit.DB(t)
+	now := testkit.At(0)
+	svc := auth.NewService(pool, invite, func() time.Time { return now })
+	ctx := context.Background()
+	reg, err := svc.Register(ctx, &milo.RegisterRequest{Username: "hishaam", Password: "password1", InviteCode: invite})
+	if err != nil {
+		t.Fatal(err)
+	}
+	userID := uuid.MustParse(reg.GetUser().GetId())
+	login := func(name, password string) error {
+		_, err := svc.Login(ctx, &milo.LoginRequest{Username: name, Password: password})
+		return err
+	}
+
+	for _, name := range []string{"hishaam", "nobody"} {
+		for range 9 {
+			testkit.WantCode(t, login(name, "password2"), connect.CodeUnauthenticated)
+		}
+	}
+	// A right password clears the count.
+	if err := login("hishaam", "password1"); err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		testkit.WantCode(t, login("hishaam", "password2"), connect.CodeUnauthenticated)
+	}
+	testkit.WantCode(t, login("nobody", "password2"), connect.CodeUnauthenticated)
+	testkit.WantCode(t, login("hishaam", "password1"), connect.CodeResourceExhausted)
+	testkit.WantCode(t, login("nobody", "password2"), connect.CodeResourceExhausted)
+	// A session they already hold gets no more guesses either.
+	_, err = svc.DeleteAccount(auth.WithUserID(ctx, userID), &milo.DeleteAccountRequest{Password: "password1"})
+	testkit.WantCode(t, err, connect.CodeResourceExhausted)
+
+	now = now.Add(15 * time.Minute)
+	if err := login("hishaam", "password1"); err != nil {
+		t.Fatalf("after the wait: %v", err)
+	}
+}
